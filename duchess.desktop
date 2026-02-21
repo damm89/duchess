@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Name=Duchess Chess
+Comment=Play chess against the custom Duchess C++ engine
+Exec=PLACEHOLDER_PROJECT_ROOT/run_duchess.sh --mode gui
+Icon=PLACEHOLDER_PROJECT_ROOT/assets/duchess_icon.png
+Terminal=false
+Type=Application
+Categories=Game;BoardGame;

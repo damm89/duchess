@@ -1,0 +1,12 @@
+dist/
+build_pyinstaller/
+engine/build/
+AppDir/
+.git/
+.env
+__pycache__/
+*.pyc
+duchess.log
+duchess.pid
+compacted.txt
+.DS_Store

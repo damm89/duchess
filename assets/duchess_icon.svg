@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#2c3e50"/>
+  <circle cx="128" cy="128" r="110" fill="#34495e"/>
+
+  <!-- Crown / Queen piece -->
+  <g transform="translate(128,130) scale(1.8)" fill="#f1c40f" stroke="#f39c12" stroke-width="2">
+    <!-- Base -->
+    <rect x="-35" y="30" width="70" height="12" rx="3"/>
+    <rect x="-30" y="22" width="60" height="12" rx="2"/>
+
+    <!-- Body -->
+    <path d="M-28,24 L-35,-15 L-18,0 L-8,-25 L0,-5 L8,-25 L18,0 L35,-15 L28,24 Z"/>
+
+    <!-- Crown tips - balls -->
+    <circle cx="-35" cy="-17" r="5"/>
+    <circle cx="-8" cy="-27" r="5"/>
+    <circle cx="0" cy="-7" r="4"/>
+    <circle cx="8" cy="-27" r="5"/>
+    <circle cx="35" cy="-17" r="5"/>
+  </g>
+
+  <!-- Text -->
+  <text x="128" y="230" text-anchor="middle" font-family="serif" font-size="28" font-weight="bold" fill="#ecf0f1">DUCHESS</text>
+</svg>

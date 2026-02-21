@@ -1,0 +1,28 @@
+# Build artifacts
+dist/
+build_pyinstaller/
+engine/build/
+AppDir/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Environment & secrets
+.env
+duchess.log
+duchess.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Agent instructions (not part of the app)
+agent_instructions/
+compacted.txt

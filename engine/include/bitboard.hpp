@@ -1,0 +1,47 @@
+#pragma once
+
+#include <cstdint>
+
+namespace duchess {
+
+using Bitboard = uint64_t;
+
+// Square index: 0=a1, 1=b1, ..., 7=h1, 8=a2, ..., 63=h8
+// sq = row * 8 + col
+
+inline constexpr int sq(int row, int col) { return row * 8 + col; }
+inline constexpr int sq_row(int s) { return s >> 3; }
+inline constexpr int sq_col(int s) { return s & 7; }
+
+inline constexpr Bitboard bit(int square) { return Bitboard(1) << square; }
+inline constexpr void set_bit(Bitboard& bb, int square) { bb |= bit(square); }
+inline constexpr void clear_bit(Bitboard& bb, int square) { bb &= ~bit(square); }
+inline constexpr bool test_bit(Bitboard bb, int square) { return (bb >> square) & 1; }
+
+// Pop least significant bit, return its index
+inline int pop_lsb(Bitboard& bb) {
+    int idx = __builtin_ctzll(bb);
+    bb &= bb - 1;
+    return idx;
+}
+
+inline int popcount(Bitboard bb) {
+    return __builtin_popcountll(bb);
+}
+
+// Precomputed attack tables
+extern Bitboard KNIGHT_ATTACKS[64];
+extern Bitboard KING_ATTACKS[64];
+extern Bitboard PAWN_ATTACKS[2][64];  // [color][square], 0=white, 1=black
+
+// Sliding piece attacks (classical ray approach)
+Bitboard bishop_attacks(int square, Bitboard occupied);
+Bitboard rook_attacks(int square, Bitboard occupied);
+inline Bitboard queen_attacks(int square, Bitboard occupied) {
+    return bishop_attacks(square, occupied) | rook_attacks(square, occupied);
+}
+
+// Must be called once at startup
+void init_attack_tables();
+
+}  // namespace duchess
