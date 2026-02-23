@@ -17,7 +17,14 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 │  C++ Engine  (engine/)                          │
 │  Board repr · Move gen · Alpha-beta search      │
 │  Zobrist hashing · Transposition tables         │
-│  Polyglot opening book · Static eval            │
+│  Polyglot opening book · NNUE + SIMD eval       │
+│  Syzygy tablebase probing (Fathom)              │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│  NNUE Training Pipeline  (nnue/)                │
+│  selfplay.py · dataset.py · train.py            │
+│  export.py · rl_loop.py (iterative RL)          │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -28,6 +35,7 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | `engine/` | C++ engine — headers in `include/`, sources in `src/`, tests in `tests/` |
 | `duchess/` | Python application — board logic, engine wrapper, processors |
 | `duchess/gui/` | PyQt6 interface — board widget, eval bar, main window |
+| `nnue/` | NNUE training pipeline — self-play, dataset extraction, PyTorch training, C++ export, RL orchestrator |
 | `tests/` | Python test suite (pytest + pytest-qt) |
 | `assets/` | Icons, piece images, and other static resources |
 
@@ -48,16 +56,18 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | **3.2** LMR & PVS | Late move reductions for quiet moves; principal variation search with null/full window re-search |
 | **3.3** Lazy SMP | Multi-threaded search with shared transposition table; helper threads at staggered depths |
 | **4.1** Syzygy Tablebases | Perfect endgame evaluation with up to 5 pieces via Fathom |
-| **4.2** NNUE Evaluation | Custom PyTorch pipeline yielding a SIMD-accelerated C++ network ([Guide](nnue/README.md)) |
+| **4.2** NNUE Evaluation | Custom PyTorch pipeline yielding a SIMD-accelerated C++ network; hot-swappable via `NNUEFile` UCI option ([Guide](nnue/README.md)) |
+| **4.3** Iterative RL Self-Play | `rl_loop.py` automates full AlphaZero-style training loop: self-play → dataset → train → export → repeat |
 | **5.1** Board Rendering | QGraphicsView/QGraphicsScene with SVG pieces and smooth drag-and-drop |
 | **5.2** Analytical Visualizations | Live evaluation bar (centipawn/mate), principal-variation arrows, threat heatmaps |
 | **5.3** Multi-Engine Analysis | Load external UCI engines for side-by-side comparison in analysis panel |
 | **6.1** Polyglot Opening Book | Default gm2001 book (credit: chess community); GUI supports loading custom `.bin` books |
 | **6.2** Colossal PGN Database | Fast importer for massive PGN files; PostgreSQL backend; GUI explorer with filtering ([Guide](PGN_IMPORT.md)) |
+| **6.3** Windows Executable | Automated GitHub Actions CI/CD builds a standalone `.exe` on every version tag push |
 
 ### 🔧 Next up
 
-- Cloud sync API (Phase 6.3)
+- Lichess API game importer (Phase 6.4)
 
 ---
 
