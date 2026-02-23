@@ -1,8 +1,7 @@
+PyQt6
 pytest
+pytest-qt
 sqlalchemy
 psycopg2-binary
 alembic
 python-dotenv
-pybind11
-PyQt6
-pytest-qt
