@@ -15,6 +15,7 @@ Instead of downloading massive human game databases, Duchess can play against he
 # Run 10,000 games of the engine against itself on all CPU cores
 python nnue/selfplay.py --games 10000 --depth 4 --random-plies 8
 ```
+*(Note: A "ply" in chess terminology is a half-move, i.e., one turn taken by one player. So `--random-plies 8` means the game will begin with 4 full moves of completely random play before the engine takes over, ensuring the generated dataset is rich and diverse.)*
 
 **Option B: External Master Games Database**
 If you imported a massive PGN file (like Lichess or MegaBase) into your PostgreSQL database using the `Colossal Database Explorer` GUI or `pgn_importer.py` CLI, you can use those human games instead.
