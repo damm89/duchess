@@ -202,11 +202,14 @@ class ChessBoardWidget(QGraphicsView):
         self._square_items = []  # 64 QGraphicsRectItem
         self._piece_items = []   # list of PieceItem currently on scene
         self._arrow_items = []   # PV arrow items
+        self._heatmap_items = []  # 64 semi-transparent overlay items
+        self._heatmap_visible = False
         self._selected_sq = None
         self._last_move_from = None
         self._last_move_to = None
 
         self._build_squares()
+        self._build_heatmap_overlays()
         self._sync_pieces()
 
     def _build_squares(self):
@@ -222,6 +225,62 @@ class ChessBoardWidget(QGraphicsView):
             rect.setZValue(0)
             self._scene.addItem(rect)
             self._square_items.append(rect)
+
+    def _build_heatmap_overlays(self):
+        """Create 64 invisible overlay items for the threat heatmap."""
+        for sq in range(64):
+            file_idx = sq % 8
+            rank_idx = 7 - (sq // 8)
+            rect = QGraphicsRectItem(
+                file_idx * SQ_SIZE, rank_idx * SQ_SIZE, SQ_SIZE, SQ_SIZE
+            )
+            rect.setPen(QPen(Qt.PenStyle.NoPen))
+            rect.setBrush(QBrush(QColor(0, 0, 0, 0)))  # fully transparent
+            rect.setZValue(0.5)  # above squares, below pieces
+            rect.setVisible(False)
+            self._scene.addItem(rect)
+            self._heatmap_items.append(rect)
+
+    def set_heatmap(self, white_attacks, black_attacks, player_color="white"):
+        """Color heatmap overlays based on attack differentials.
+
+        Args:
+            white_attacks: list of 64 ints — white attack count per square.
+            black_attacks: list of 64 ints — black attack count per square.
+            player_color: 'white' or 'black' — determines which side is
+                          'friendly' (blue) vs 'hostile' (red).
+        """
+        self._heatmap_visible = True
+        for sq in range(64):
+            w = white_attacks[sq]
+            b = black_attacks[sq]
+
+            if player_color == "white":
+                friendly, hostile = w, b
+            else:
+                friendly, hostile = b, w
+
+            diff = friendly - hostile
+            overlay = self._heatmap_items[sq]
+
+            if diff > 0:
+                # Friendly control — blue tint
+                alpha = min(120, 30 * diff)
+                overlay.setBrush(QBrush(QColor(60, 120, 220, alpha)))
+                overlay.setVisible(True)
+            elif diff < 0:
+                # Hostile control — red tint
+                alpha = min(120, 30 * abs(diff))
+                overlay.setBrush(QBrush(QColor(220, 60, 60, alpha)))
+                overlay.setVisible(True)
+            else:
+                overlay.setVisible(False)
+
+    def clear_heatmap(self):
+        """Hide all heatmap overlays."""
+        self._heatmap_visible = False
+        for overlay in self._heatmap_items:
+            overlay.setVisible(False)
 
     def _update_square_colors(self):
         """Refresh square highlights."""

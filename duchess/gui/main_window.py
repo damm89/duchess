@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 
 from duchess.board import DuchessBoard
 from duchess.engine_wrapper import UCIEngine, get_engine
+from duchess.attacks import compute_attack_maps
 from duchess.gui.board_widget import ChessBoardWidget
 from duchess.gui.eval_bar import EvaluationBar
 from duchess.gui.worker import EngineWorker
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         self._workers = {}          # engine_name -> EngineWorker
         self._engines = []          # list of UCIEngine instances
         self._analysis_rows = {}    # engine_name -> {depth, score, pv} QLabels
+        self._heatmap_on = False
 
         # --- Widgets ---
         self._eval_bar = EvaluationBar()
@@ -95,6 +97,12 @@ class MainWindow(QMainWindow):
         btn_load = QPushButton("Load External Engine...")
         btn_load.clicked.connect(self._load_external_engine)
         controls.addWidget(btn_load)
+
+        # Threat heatmap toggle
+        self._btn_heatmap = QPushButton("Threat Heatmap")
+        self._btn_heatmap.setCheckable(True)
+        self._btn_heatmap.clicked.connect(self._toggle_heatmap)
+        controls.addWidget(self._btn_heatmap)
 
         controls.addStretch()
 
@@ -186,6 +194,8 @@ class MainWindow(QMainWindow):
             self._board_widget.setEnabled(False)
             self._start_engine()
 
+        self._refresh_heatmap()
+
     def _resign(self):
         self._board_widget.setEnabled(False)
         self._status.showMessage("You resigned.")
@@ -211,6 +221,7 @@ class MainWindow(QMainWindow):
         # Disable board while engine thinks
         self._board_widget.setEnabled(False)
         self._status.showMessage("Engine is thinking...")
+        self._refresh_heatmap()
         self._start_engine()
 
     # --- Engine ---
@@ -309,10 +320,10 @@ class MainWindow(QMainWindow):
             self._handle_game_over()
             return
 
-        # Re-enable board
         self._board_widget.setEnabled(True)
         turn = "White" if board.turn == "white" else "Black"
         self._status.showMessage(f"Your move ({turn}).")
+        self._refresh_heatmap()
         self._workers.clear()
 
     # --- Game over ---
@@ -332,3 +343,19 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"Game over — {msg}")
         self._log.append(f"\n{msg} ({result})")
         QMessageBox.information(self, "Game Over", msg)
+
+    # --- Threat Heatmap ---
+
+    def _toggle_heatmap(self):
+        self._heatmap_on = self._btn_heatmap.isChecked()
+        if self._heatmap_on:
+            self._refresh_heatmap()
+        else:
+            self._board_widget.clear_heatmap()
+
+    def _refresh_heatmap(self):
+        if not self._heatmap_on:
+            return
+        pieces = [self._board_widget.board.piece_at_sq(sq) for sq in range(64)]
+        w, b = compute_attack_maps(pieces)
+        self._board_widget.set_heatmap(w, b, self._player_color)
