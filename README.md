@@ -51,12 +51,12 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | **5.2** Analytical Visualizations | Live evaluation bar (centipawn/mate), principal-variation arrows, threat heatmaps |
 | **5.3** Multi-Engine Analysis | Load external UCI engines for side-by-side comparison in analysis panel |
 | **6.1** Polyglot Opening Book | Default gm2001 book (credit: chess community); GUI supports loading custom `.bin` books |
+| **6.2** Colossal PGN Database | Fast importer for massive PGN files; PostgreSQL backend; GUI explorer with filtering |
 
 ### 🔧 Next up
 
 - Syzygy tablebase integration (Phase 4.1)
 - NNUE evaluation (Phase 4.2 / 4.3)
-- PGN database with PostgreSQL (Phase 6.2)
 - Cloud sync API (Phase 6.3)
 
 ---

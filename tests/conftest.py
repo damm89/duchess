@@ -34,5 +34,19 @@ def mock_lichess_api_globally(request):
         return
     
     from unittest.mock import patch
-    with patch("duchess.lichess_api.LichessExplorerClient.query", return_value={"total": 0, "moves": [], "opening": None}):
+    with patch("duchess.gui.opening_explorer.OpeningExplorerWidget.update_position"):
         yield
+
+@pytest.fixture(autouse=True)
+def cleanup_engine_workers():
+    """Centrally solve thread-related Python aborts by ensuring all EngineWorkers are joined before test teardown."""
+    from duchess.gui.worker import EngineWorker
+    EngineWorker._active_workers = getattr(EngineWorker, "_active_workers", [])
+    yield
+    for worker in list(EngineWorker._active_workers):
+        try:
+            if worker.isRunning():
+                worker.wait(3000)
+        except RuntimeError:
+            pass
+    EngineWorker._active_workers.clear()

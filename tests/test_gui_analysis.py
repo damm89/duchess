@@ -222,27 +222,30 @@ class TestAnalysisPanel:
     def test_duchess_row_exists_at_init(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
-        assert len(window._analysis_rows) == 1
-        assert window._duchess_name in window._analysis_rows
+        assert len(window._control_panel._analysis_rows) == 1
+        from duchess.engine_wrapper import get_engine
+        assert get_engine().name in window._control_panel._analysis_rows
 
     def test_add_analysis_row(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
         window._add_analysis_row("Stockfish 16")
-        assert "Stockfish 16" in window._analysis_rows
-        assert len(window._analysis_rows) == 2
+        assert "Stockfish 16" in window._control_panel._analysis_rows
+        assert len(window._control_panel._analysis_rows) == 2
 
     def test_search_info_updates_duchess_row(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
-        window._on_search_info(window._duchess_name, {
+        from duchess.engine_wrapper import get_engine
+        duchess_name = get_engine().name
+        window._on_search_info(duchess_name, {
             "depth": 7,
             "score_cp": 55,
             "nodes": 5000,
             "nps": 25000,
             "pv": ["e2e4", "e7e5"],
         })
-        row = window._analysis_rows[window._duchess_name]
+        row = window._control_panel.get_analysis_row(duchess_name)
         assert row["depth"].text() == "d7"
         assert row["score"].text() == "+0.55"
         assert "e2e4" in row["pv"].text()
@@ -256,7 +259,7 @@ class TestAnalysisPanel:
             "score_cp": -80,
             "pv": ["d2d4", "d7d5", "c2c4"],
         })
-        row = window._analysis_rows["Stockfish 16"]
+        row = window._control_panel.get_analysis_row("Stockfish 16")
         assert row["depth"].text() == "d15"
         assert row["score"].text() == "-0.80"
         assert "d2d4" in row["pv"].text()
@@ -264,7 +267,8 @@ class TestAnalysisPanel:
     def test_duchess_info_updates_eval_bar(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
-        window._on_search_info(window._duchess_name, {
+        from duchess.engine_wrapper import get_engine
+        window._on_search_info(get_engine().name, {
             "depth": 5,
             "score_cp": 150,
             "pv": ["e2e4"],
@@ -296,11 +300,13 @@ class TestAnalysisPanel:
     def test_new_game_resets_analysis_rows(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
+        from duchess.engine_wrapper import get_engine
+        duchess_name = get_engine().name
         # Simulate some info
-        window._on_search_info(window._duchess_name, {
+        window._on_search_info(duchess_name, {
             "depth": 10, "score_cp": 200, "pv": ["e2e4"],
         })
-        row = window._analysis_rows[window._duchess_name]
+        row = window._control_panel.get_analysis_row(duchess_name)
         assert row["depth"].text() != "--"
         # New game resets
         window._new_game("white")

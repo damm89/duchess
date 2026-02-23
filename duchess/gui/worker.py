@@ -14,6 +14,9 @@ class EngineWorker(QThread):
         self._fen = fen
         self._time_ms = time_ms
         self._engine = engine  # UCIEngine instance, or None for default
+        if not hasattr(EngineWorker, "_active_workers"):
+            EngineWorker._active_workers = []
+        EngineWorker._active_workers.append(self)
 
     def run(self):
         try:

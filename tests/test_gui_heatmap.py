@@ -69,21 +69,21 @@ class TestMainWindowHeatmapToggle:
     def test_heatmap_button_exists(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
-        assert hasattr(window, '_btn_heatmap')
-        assert window._btn_heatmap.isCheckable()
+        assert hasattr(window._control_panel, 'heatmap_button')
+        assert window._control_panel.heatmap_button.isCheckable()
 
     def test_toggle_heatmap_on_off(self, qtbot):
         window = MainWindow()
         qtbot.addWidget(window)
 
         # Toggle on
-        window._btn_heatmap.setChecked(True)
+        window._control_panel.heatmap_button.setChecked(True)
         window._toggle_heatmap()
         assert window._heatmap_on is True
         assert window._board_widget._heatmap_visible is True
 
         # Toggle off
-        window._btn_heatmap.setChecked(False)
+        window._control_panel.heatmap_button.setChecked(False)
         window._toggle_heatmap()
         assert window._heatmap_on is False
         assert window._board_widget._heatmap_visible is False

@@ -15,7 +15,7 @@ from duchess.engine_wrapper import UCIEngine, get_engine
 from duchess.attacks import compute_attack_maps
 from duchess.gui.board_widget import ChessBoardWidget
 from duchess.gui.eval_bar import EvaluationBar
-from duchess.gui.opening_explorer import OpeningExplorerWidget
+from duchess.gui.control_panel import ControlPanelWidget
 from duchess.gui.database_window import DatabaseExplorerDialog
 from duchess.gui.worker import EngineWorker
 
@@ -30,14 +30,7 @@ def _resource_path(relative: str) -> Path:
 
 ICON_PATH = _resource_path("assets/duchess_icon.png")
 
-# Thinking time options: (label, milliseconds)
-TIME_OPTIONS = [
-    ("0.5s", 500),
-    ("1s", 1000),
-    ("2s", 2000),
-    ("5s", 5000),
-    ("10s", 10000),
-]
+# Move time options inside control_panel.py
 
 
 class MainWindow(QMainWindow):
@@ -52,98 +45,32 @@ class MainWindow(QMainWindow):
         self._move_number = 1
         self._workers = {}          # engine_name -> EngineWorker
         self._engines = []          # list of UCIEngine instances
-        self._analysis_rows = {}    # engine_name -> {depth, score, pv} QLabels
         self._heatmap_on = False
-
         # --- Widgets ---
         self._eval_bar = EvaluationBar()
         self._board_widget = ChessBoardWidget()
         self._board_widget.move_made.connect(self._on_player_move)
 
-        # Control panel
-        btn_white = QPushButton("New Game (White)")
-        btn_white.clicked.connect(lambda: self._new_game("white"))
-        btn_black = QPushButton("New Game (Black)")
-        btn_black.clicked.connect(lambda: self._new_game("black"))
-        btn_resign = QPushButton("Resign")
-        btn_resign.clicked.connect(self._resign)
-
-        controls = QVBoxLayout()
-        controls.addWidget(btn_white)
-        controls.addWidget(btn_black)
-        controls.addWidget(btn_resign)
-
-        # Thinking time selector
-        controls.addWidget(QLabel("Engine time:"))
-        self._time_combo = QComboBox()
-        for label, _ in TIME_OPTIONS:
-            self._time_combo.addItem(label)
-        self._time_combo.setCurrentIndex(1)  # default 1s
-        controls.addWidget(self._time_combo)
-
-        # Move log
-        self._log = QTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setMinimumWidth(200)
-        controls.addWidget(QLabel("Moves:"))
-        controls.addWidget(self._log)
-
-        # Analysis panel
-        self._analysis_box = QGroupBox("Analysis")
-        self._analysis_layout = QGridLayout()
-        self._analysis_layout.setColumnStretch(2, 1)  # PV column stretches
-        self._analysis_box.setLayout(self._analysis_layout)
-        controls.addWidget(self._analysis_box)
-
-        # Load external engine button
-        btn_load = QPushButton("Load External Engine...")
-        btn_load.clicked.connect(self._load_external_engine)
-        controls.addWidget(btn_load)
-
-        # Threat heatmap toggle
-        self._btn_heatmap = QPushButton("Threat Heatmap")
-        self._btn_heatmap.setCheckable(True)
-        self._btn_heatmap.clicked.connect(self._toggle_heatmap)
-        controls.addWidget(self._btn_heatmap)
-
-        # Opening book controls
-        book_box = QGroupBox("Opening Book")
-        book_layout = QVBoxLayout()
         engine = get_engine()
-        book_label_text = engine.book_name or "None"
-        self._book_label = QLabel(f"Book: {book_label_text}")
-        book_layout.addWidget(self._book_label)
-        book_btn = QPushButton("Load Book...")
-        book_btn.clicked.connect(self._load_custom_book)
-        book_layout.addWidget(book_btn)
-
-        book_reset = QPushButton("Reset to Default (gm2001)")
-        book_reset.clicked.connect(self._reset_default_book)
-        book_layout.addWidget(book_reset)
+        self._control_panel = ControlPanelWidget(engine.book_name)
         
-        db_explorer_btn = QPushButton("Colossal Database Explorer")
-        db_explorer_btn.clicked.connect(self._open_db_explorer)
-        book_layout.addWidget(db_explorer_btn)
-
-        book_box.setLayout(book_layout)
-        controls.addWidget(book_box)
-
-        # Opening Explorer panel (data from Lichess Masters database)
-        self._explorer = OpeningExplorerWidget()
-        self._explorer.move_clicked.connect(self._on_explorer_move)
-        controls.addWidget(self._explorer)
-
-        controls.addStretch()
+        # Connect signals
+        self._control_panel.new_game_requested.connect(self._new_game)
+        self._control_panel.resign_requested.connect(self._resign)
+        self._control_panel.load_external_engine_requested.connect(self._load_external_engine)
+        self._control_panel.heatmap_toggled.connect(self._toggle_heatmap)
+        self._control_panel.load_book_requested.connect(self._load_custom_book)
+        self._control_panel.reset_book_requested.connect(self._reset_default_book)
+        self._control_panel.db_explorer_requested.connect(self._open_db_explorer)
+        self._control_panel.explorer_move_clicked.connect(self._on_explorer_move)
 
         # Layout: eval bar | board | controls
         main_layout = QHBoxLayout()
         main_layout.addWidget(self._eval_bar)
         main_layout.addWidget(self._board_widget, stretch=1)
 
-        right_panel = QWidget()
-        right_panel.setLayout(controls)
-        right_panel.setFixedWidth(300)
-        main_layout.addWidget(right_panel)
+        self._control_panel.setFixedWidth(300)
+        main_layout.addWidget(self._control_panel)
 
         central = QWidget()
         central.setLayout(main_layout)
@@ -163,8 +90,7 @@ class MainWindow(QMainWindow):
         self._add_analysis_row(self._duchess_name)
 
     def _selected_time_ms(self):
-        idx = self._time_combo.currentIndex()
-        return TIME_OPTIONS[idx][1]
+        return self._control_panel.selected_time_ms()
 
     # --- External engine loading ---
 
@@ -184,22 +110,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"Loaded engine: {engine.name}")
 
     def _add_analysis_row(self, name):
-        row = self._analysis_layout.rowCount()
-        name_label = QLabel(name)
-        name_label.setStyleSheet("font-weight: bold;")
-        depth_label = QLabel("--")
-        score_label = QLabel("--")
-        pv_label = QLabel("")
-        pv_label.setWordWrap(True)
-        self._analysis_layout.addWidget(name_label, row, 0)
-        self._analysis_layout.addWidget(depth_label, row, 1)
-        self._analysis_layout.addWidget(score_label, row, 2)
-        self._analysis_layout.addWidget(pv_label, row, 3)
-        self._analysis_rows[name] = {
-            "depth": depth_label,
-            "score": score_label,
-            "pv": pv_label,
-        }
+        self._control_panel.add_analysis_row(name)
 
     # --- Game management ---
 
@@ -208,16 +119,12 @@ class MainWindow(QMainWindow):
         self._move_number = 1
         self._board_widget.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         self._board_widget.setEnabled(True)
-        self._log.clear()
+        self._control_panel.clear_log()
         self._eval_bar.set_score(cp=0)
-        # Reset analysis rows
-        for row in self._analysis_rows.values():
-            row["depth"].setText("--")
-            row["score"].setText("--")
-            row["pv"].setText("")
+        self._control_panel.clear_analysis()
 
         # Refresh opening explorer for starting position
-        self._explorer.update_position(self._board_widget.board.fen())
+        self._control_panel.explorer.update_position(self._board_widget.board.fen())
 
         if color == "white":
             self._status.showMessage("Your move (White).")
@@ -231,7 +138,7 @@ class MainWindow(QMainWindow):
     def _resign(self):
         self._board_widget.setEnabled(False)
         self._status.showMessage("You resigned.")
-        self._log.append("Resigned.")
+        self._control_panel.append_log("Resigned.")
 
     # --- Player move ---
 
@@ -240,9 +147,9 @@ class MainWindow(QMainWindow):
 
         # Log the player's move
         if self._player_color == "white":
-            self._log.insertPlainText(f"{self._move_number}. {san} ")
+            self._control_panel.insert_log(f"{self._move_number}. {san} ")
         else:
-            self._log.insertPlainText(f"{san}\n")
+            self._control_panel.insert_log(f"{san}\n")
             self._move_number += 1
 
         # Check game over after player move
@@ -254,7 +161,7 @@ class MainWindow(QMainWindow):
         self._board_widget.setEnabled(False)
         self._status.showMessage("Engine is thinking...")
         self._refresh_heatmap()
-        self._explorer.update_position(self._board_widget.board.fen())
+        self._control_panel.explorer.update_position(self._board_widget.board.fen())
         self._start_engine()
 
     # --- Engine ---
@@ -309,8 +216,8 @@ class MainWindow(QMainWindow):
             self._status.showMessage(f"Thinking... depth {depth}  nodes {nodes}  nps {nps}")
 
         # Update analysis panel row
-        if name in self._analysis_rows:
-            row = self._analysis_rows[name]
+        row = self._control_panel.get_analysis_row(name)
+        if row:
             row["depth"].setText(f"d{info.get('depth', '?')}")
             if "score_mate" in info:
                 row["score"].setText(f"M{info['score_mate']}")
@@ -343,10 +250,10 @@ class MainWindow(QMainWindow):
 
         # Log the engine's move
         if self._player_color == "white":
-            self._log.insertPlainText(f"{san}\n")
+            self._control_panel.insert_log(f"{san}\n")
             self._move_number += 1
         else:
-            self._log.insertPlainText(f"{self._move_number}. {san} ")
+            self._control_panel.insert_log(f"{self._move_number}. {san} ")
 
         # Check game over
         if board.is_game_over():
@@ -357,7 +264,7 @@ class MainWindow(QMainWindow):
         turn = "White" if board.turn == "white" else "Black"
         self._status.showMessage(f"Your move ({turn}).")
         self._refresh_heatmap()
-        self._explorer.update_position(board.fen())
+        self._control_panel.explorer.update_position(board.fen())
         self._workers.clear()
 
     # --- Game over ---
@@ -375,13 +282,13 @@ class MainWindow(QMainWindow):
             msg = "Draw by stalemate!"
 
         self._status.showMessage(f"Game over — {msg}")
-        self._log.append(f"\n{msg} ({result})")
+        self._control_panel.append_log(f"\n{msg} ({result})")
         QMessageBox.information(self, "Game Over", msg)
 
     # --- Threat Heatmap ---
 
     def _toggle_heatmap(self):
-        self._heatmap_on = self._btn_heatmap.isChecked()
+        self._heatmap_on = self._control_panel.heatmap_button.isChecked()
         if self._heatmap_on:
             self._refresh_heatmap()
         else:
@@ -404,14 +311,14 @@ class MainWindow(QMainWindow):
         if path:
             engine = get_engine()
             engine.set_book(path)
-            self._book_label.setText(f"Book: {engine.book_name}")
+            self._control_panel.set_book_name(engine.book_name)
             self._status.showMessage(f"Loaded opening book: {engine.book_name}")
 
     def _reset_default_book(self):
         engine = get_engine()
         engine.reset_book()
         name = engine.book_name or "None"
-        self._book_label.setText(f"Book: {name}")
+        self._control_panel.set_book_name(name)
         self._status.showMessage(f"Reset to default opening book: {name}")
 
     # --- Opening Explorer ---
@@ -431,9 +338,9 @@ class MainWindow(QMainWindow):
 
         # Log the move
         if board.turn == "white":
-            self._log.insertPlainText(f"{self._move_number}. {san} ")
+            self._control_panel.insert_log(f"{self._move_number}. {san} ")
         else:
-            self._log.insertPlainText(f"{san}\n")
+            self._control_panel.insert_log(f"{san}\n")
             self._move_number += 1
 
         # Push the move
@@ -445,7 +352,7 @@ class MainWindow(QMainWindow):
         self._board_widget._sync_pieces()
 
         # Update explorer for new position
-        self._explorer.update_position(board.fen())
+        self._control_panel.explorer.update_position(board.fen())
         self._refresh_heatmap()
 
         if board.is_game_over():
@@ -466,7 +373,7 @@ class MainWindow(QMainWindow):
         board = self._board_widget.board
         tokens = pgn_text.split()
         
-        self._log.clear()
+        self._control_panel.clear_log()
         
         # We need to temporarily disable validation bounds because SAN parsing needs piece locations
         # and rapid pushing requires the engine to keep up.
@@ -476,9 +383,9 @@ class MainWindow(QMainWindow):
             # Skip move numbers (e.g. "1.", "12...") and results
             if "." in token or token in ["1-0", "0-1", "1/2-1/2", "*"]:
                 if "." in token:
-                    self._log.insertPlainText(f"{token} ")
+                    self._control_panel.insert_log(f"{token} ")
                 elif token in ["1-0", "0-1", "1/2-1/2", "*"]:
-                    self._log.insertPlainText(f"\nResult: {token}")
+                    self._control_panel.insert_log(f"\nResult: {token}")
                 continue
                 
             try:
@@ -487,9 +394,9 @@ class MainWindow(QMainWindow):
                 board.push(move)
                 
                 # Log the move text format manually since we don't have turn state available here
-                self._log.insertPlainText(f"{token} ")
+                self._control_panel.insert_log(f"{token} ")
                 if board.turn == "white":
-                    self._log.insertPlainText("\n")
+                    self._control_panel.insert_log("\n")
                 
             except Exception as e:
                 import logging
@@ -500,5 +407,12 @@ class MainWindow(QMainWindow):
         self._board_widget.clear_arrows()
         self._board_widget._sync_pieces()
         self._refresh_heatmap()
-        self._explorer.update_position(board.fen())
+        self._control_panel.explorer.update_position(board.fen())
         self._status.showMessage("Loaded master game from database.")
+
+    def closeEvent(self, event):
+        """Cleanly shut down engine workers to prevent QThread destroyed while thread is still running crashes."""
+        for worker in list(self._workers.values()):
+            if worker.isRunning():
+                worker.wait(3000)
+        super().closeEvent(event)
