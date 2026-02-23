@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from duchess.database import Base
@@ -71,3 +71,7 @@ class MasterGame(Base):
     
     # The full raw text of the moves (e.g. "1. e4 e5 ...")
     move_text = Column(Text, nullable=False)
+
+    # Whether this game should be used for NNUE training data generation.
+    # True by default for selfplay-generated games, False for imported PGNs.
+    training_use = Column(Boolean, nullable=False, default=False, server_default="false")

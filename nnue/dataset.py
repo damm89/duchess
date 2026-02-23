@@ -23,7 +23,7 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
     logging.info(f"Connecting to database and fetching up to {max_games} games...")
     db: Session = SessionLocal()
     try:
-        query = db.query(MasterGame).limit(max_games)
+        query = db.query(MasterGame).filter(MasterGame.training_use.is_(True)).limit(max_games)
         games = query.all()
     finally:
         db.close()

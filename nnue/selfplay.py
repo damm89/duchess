@@ -89,7 +89,8 @@ def play_game(engine_path: str, depth: int, random_plies: int) -> Optional[dict]
             "white_elo": 0,
             "black_elo": 0,
             "eco": game.headers.get("ECO", ""),
-            "move_text": pgn_string
+            "move_text": pgn_string,
+            "training_use": True
         }
 
     except Exception as e:

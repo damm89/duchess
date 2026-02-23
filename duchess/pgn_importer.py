@@ -24,7 +24,7 @@ RESULT_RE = re.compile(r'(1-0|0-1|1/2-1/2|\*)')
 BATCH_SIZE = 10000
 
 
-def parse_and_import(pgn_path: str, max_games: int = 0, db: Session = None):
+def parse_and_import(pgn_path: str, max_games: int = 0, db: Session = None, training_use: bool = False):
     """Parse a PGN file linearly and bulk insert into PostgreSQL."""
     logger.info(f"Starting import of {pgn_path}")
     start_time = time.time()
@@ -59,6 +59,7 @@ def parse_and_import(pgn_path: str, max_games: int = 0, db: Session = None):
             "black_elo": _parse_int(current_game.get("BlackElo", "0")),
             "eco": current_game.get("ECO", ""),
             "move_text": text,
+            "training_use": training_use,
         }
         batch.append(game_dict)
         

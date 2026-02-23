@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QAbstractItemView,
-    QHeaderView, QComboBox, QMessageBox
+    QHeaderView, QComboBox, QMessageBox, QCheckBox
 )
 
 from duchess.database import SessionLocal
@@ -53,7 +53,8 @@ class _SearchWorker(QThread):
                     "eco": game.eco,
                     "date": game.date,
                     "event": game.event,
-                    "move_text": game.move_text
+                    "move_text": game.move_text,
+                    "training_use": game.training_use,
                 })
         except Exception as e:
             error_msg = str(e)
@@ -67,14 +68,14 @@ class _ImportWorker(QThread):
     """Background thread to import a PGN file without freezing the GUI."""
     finished = pyqtSignal(bool, str)  # emits (success, error_msg)
 
-    def __init__(self, pgn_path: str, parent=None):
+    def __init__(self, pgn_path: str, training_use: bool = False, parent=None):
         super().__init__(parent)
         self.pgn_path = pgn_path
+        self.training_use = training_use
 
     def run(self):
         try:
-            # Re-use the high-performance importer
-            parse_and_import(self.pgn_path)
+            parse_and_import(self.pgn_path, training_use=self.training_use)
             self.finished.emit(True, "")
         except Exception as e:
             import traceback
@@ -152,9 +153,9 @@ class DatabaseExplorerDialog(QDialog):
         layout.addLayout(top_layout)
 
         # 2. Results Table
-        self._table = QTableWidget(0, 6)
+        self._table = QTableWidget(0, 7)
         self._table.setHorizontalHeaderLabels(
-            ["White", "Black", "Result", "ECO", "Date", "Event"]
+            ["White", "Black", "Result", "ECO", "Date", "Event", "Training"]
         )
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -167,6 +168,7 @@ class DatabaseExplorerDialog(QDialog):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents) # ECO
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents) # Date
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Event
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents) # Training
         
         self._table.cellDoubleClicked.connect(self._on_row_double_clicked)
         layout.addWidget(self._table)
@@ -218,6 +220,12 @@ class DatabaseExplorerDialog(QDialog):
             self._table.setItem(row, 4, QTableWidgetItem(g["date"] or ""))
             self._table.setItem(row, 5, QTableWidgetItem(g["event"] or ""))
 
+            # Training checkbox
+            cb = QCheckBox()
+            cb.setChecked(g["training_use"])
+            cb.stateChanged.connect(lambda state, game_id=g["id"]: self._toggle_training(game_id, state))
+            self._table.setCellWidget(row, 6, cb)
+
         limit_msg = " (max 1000)" if len(results) == 1000 else ""
         self._status_label.setText(f"Found {len(results)} games{limit_msg}.")
 
@@ -227,6 +235,21 @@ class DatabaseExplorerDialog(QDialog):
             game = self._results_data[row]
             self.game_selected.emit(game["move_text"])
             self.accept()  # Close the dialog
+
+    def _toggle_training(self, game_id: int, state: int):
+        """Update training_use flag for a single game in the DB."""
+        value = state == Qt.CheckState.Checked.value
+        db = SessionLocal()
+        try:
+            game = db.query(MasterGame).get(game_id)
+            if game:
+                game.training_use = value
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            QMessageBox.warning(self, "Error", f"Failed to update training flag: {e}")
+        finally:
+            db.close()
 
     # --- PGN Import UI ---
     
@@ -240,20 +263,34 @@ class DatabaseExplorerDialog(QDialog):
         if not path:
             return
 
-        # Note: if they select a .zst, parse_and_import would need a wrapper 
-        # (zstandard library) to read it directly, or they have to decompress first.
-        # For our v1, we assume it's uncompressed text.
         if path.endswith(".zst"):
-            QMessageBox.warning(self, "Unsupported Format", 
+            QMessageBox.warning(self, "Unsupported Format",
                                 "Please extract the .zst file first and import the uncompressed .pgn file.")
             return
+
+        # Ask whether to flag these games for training
+        from PyQt6.QtWidgets import QDialog as _QD, QDialogButtonBox
+        dlg = _QD(self)
+        dlg.setWindowTitle("Import Options")
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.addWidget(QLabel(f"Importing: {path.split('/')[-1]}"))
+        training_cb = QCheckBox("Include these games for NNUE training")
+        dlg_layout.addWidget(training_cb)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        dlg_layout.addWidget(buttons)
+        if dlg.exec() != _QD.DialogCode.Accepted:
+            return
+
+        training_use = training_cb.isChecked()
 
         # Disable UI during import
         self._import_btn.setEnabled(False)
         self._search_btn.setEnabled(False)
         self._status_label.setText("Importing massive PGN database... (This may take a minute)")
 
-        self._import_worker = _ImportWorker(path, parent=self)
+        self._import_worker = _ImportWorker(path, training_use=training_use, parent=self)
         self._import_worker.finished.connect(self._on_import_finished)
         self._import_worker.start()
 
