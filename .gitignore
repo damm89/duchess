@@ -4,6 +4,9 @@ build_pyinstaller/
 engine/build/
 AppDir/
 
+# Syzygy
+Syzygy/
+
 # Python
 __pycache__/
 *.pyc
