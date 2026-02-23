@@ -8,6 +8,7 @@
 #include "tt.h"
 #include "polyglot.h"
 #include "tbprobe.h"
+#include "nnue.h"
 #include <atomic>
 #include <iostream>
 #include <sstream>
@@ -142,15 +143,22 @@ static void handle_go(const std::vector<std::string>& tokens) {
                       << " score cp " << r.score
                       << " nodes " << r.nodes
                       << " time " << elapsed_ms
-                      << " nps " << nps
-                      << " pv " << r.best_move.to_uci()
-                      << std::endl;
+                      << " nps " << nps;
+            
+            if (r.best_move.from_sq != r.best_move.to_sq) {
+                std::cout << " pv " << r.best_move.to_uci();
+            }
+            std::cout << std::endl;
         };
 
         SearchResult result = search_uci(
             search_board, stop_flag, time_limit_ms, max_depth, info_cb, 0);
 
-        std::cout << "bestmove " << result.best_move.to_uci() << std::endl;
+        if (result.best_move.from_sq != result.best_move.to_sq) {
+            std::cout << "bestmove " << result.best_move.to_uci() << std::endl;
+        } else {
+            std::cout << "bestmove (none)" << std::endl;
+        }
     });
 
     // Helper threads: silently search and populate TT
@@ -214,6 +222,7 @@ void uci_loop() {
             std::cout << "option name OwnBook type check default false" << std::endl;
             std::cout << "option name BookFile type string default <empty>" << std::endl;
             std::cout << "option name SyzygyPath type string default <empty>" << std::endl;
+            std::cout << "option name NNUEFile type string default <empty>" << std::endl;
             std::cout << "uciok" << std::endl;
         } else if (cmd == "isready") {
             // Wait for search to finish before responding
@@ -244,6 +253,17 @@ void uci_loop() {
                         path += tokens[i];
                     }
                     tb_init(path.c_str());
+                } else if (tokens[2] == "NNUEFile") {
+                    std::string path = "";
+                    for (size_t i = 4; i < tokens.size(); ++i) {
+                        if (i > 4) path += " ";
+                        path += tokens[i];
+                    }
+                    if (nnue::load_model(path)) {
+                        std::cout << "info string NNUE loaded from " << path << std::endl;
+                    } else {
+                        std::cout << "info string Failed to load NNUE from " << path << std::endl;
+                    }
                 }
             }
         } else if (cmd == "ucinewgame") {

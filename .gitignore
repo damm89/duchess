@@ -40,3 +40,6 @@ compacted.txt
 # Agent instructions (not part of the app)
 agent_instructions/
 **/engine_phase1_instructions.md
+nnue/*.jsonl
+nnue/*.pt
+nnue/duchess_iter_*.bin

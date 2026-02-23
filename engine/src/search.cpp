@@ -259,6 +259,9 @@ static SearchResult search_internal(const Board& board, int depth, SearchState& 
 
     auto moves = board.generate_legal_moves();
     if (moves.empty()) return result;
+    
+    // Assign a default valid move in case we abort before completing any search
+    result.best_move = moves[0];
 
     Board board_copy = board;
     order_moves(board_copy, moves);
@@ -306,8 +309,8 @@ SearchResult search_timed(const Board& board, int time_limit_ms) {
 
         if (state.aborted) {
             // Time ran out mid-search; keep the previous completed depth's result.
-            // But if we have no result yet (depth 1 timed out), use whatever we got.
-            if (best.score == -INF && result.best_move.to_uci() != "a1a1") {
+            // If depth 1 timed out, best.score will be -INF, but result.best_move is guaranteed to be legal.
+            if (best.score == -INF) {
                 best = result;
             }
             break;
@@ -361,7 +364,8 @@ SearchResult search_uci(const Board& board,
         SearchResult result = search_internal(board, depth, state);
 
         if (state.aborted) {
-            if (best.score == -INF && result.best_move.to_uci() != "a1a1") {
+            // If depth 1 was aborted, best.score is -INF, but we must return a legal move.
+            if (best.score == -INF) {
                 best = result;
             }
             break;

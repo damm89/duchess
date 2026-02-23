@@ -100,6 +100,11 @@ class UCIEngine:
             book_path = self._find_default_book()
             if book_path:
                 self.set_book(book_path)
+                
+            # If a custom RL brain exists, auto-load it
+            nnue_path = self._find_default_nnue()
+            if nnue_path:
+                self.set_option("NNUEFile", nnue_path)
 
     @staticmethod
     def _find_default_book():
@@ -110,6 +115,20 @@ class UCIEngine:
         base = getattr(sys, '_MEIPASS', None)
         if base:
             candidates.insert(0, Path(base) / "data" / "gm2001.bin")
+        for p in candidates:
+            if p.exists():
+                return str(p)
+        return None
+
+    @staticmethod
+    def _find_default_nnue():
+        """Locate the default duchess.bin neural network weights file."""
+        candidates = [
+            Path(__file__).resolve().parent.parent / "nnue" / "duchess.bin",
+        ]
+        base = getattr(sys, '_MEIPASS', None)
+        if base:
+            candidates.insert(0, Path(base) / "nnue" / "duchess.bin")
         for p in candidates:
             if p.exists():
                 return str(p)

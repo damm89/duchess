@@ -25,6 +25,8 @@ class NNUEDataset(Dataset):
         score_cp = row['score']
         
         # Sigmoid scaling trick for chess evaluation (often ~ 1 / (1 + exp(-score / 400)))
+        # Clamp checkmate scores (-999999) to prevent math range overflows
+        score_cp = max(-4000.0, min(4000.0, float(score_cp)))
         target = 1.0 / (1.0 + math.exp(-score_cp / 400.0))
         
         board = chess.Board(fen)

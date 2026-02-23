@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
+"""
+Reinforcement Learning Orchestrator.
+Automates the full pipeline:
+1. Self-Play (generates games into DB using current NNUE)
+2. Dataset Generation (extracts latest games to .jsonl)
+3. Training (trains a new PyTorch model)
+4. Export (converts .pt to .bin)
+5. Repeat (loads new .bin into self-play)
+"""
+import argparse
+import logging
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PYTHON_EXE = sys.executable
+
+def run_step(name: str, cmd: list[str]) -> bool:
+    logger.info(f"==== STARTING STEP: {name} ====")
+    logger.info(f"Command: {' '.join(cmd)}")
+    
+    start = time.time()
+    try:
+        result = subprocess.run(cmd, check=True)
+        elapsed = time.time() - start
+        logger.info(f"==== COMPLETED: {name} in {elapsed:.1f}s ====\n")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"==== FAILED: {name} (Exit code {e.returncode}) ====\n")
+        return False
+    except KeyboardInterrupt:
+        logger.warning(f"\n==== ABORTED BY USER: {name} ====\n")
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(description="Duchess Iterative RL Self-Play Loop")
+    parser.add_argument("--iterations", type=int, default=10, help="Number of full RL loops to run.")
+    parser.add_argument("--games-per-iter", type=int, default=5000, help="Number of self-play games to generate per iteration.")
+    parser.add_argument("--threads", type=int, default=10, help="Number of engine threads for self-play.")
+    parser.add_argument("--start-nnue", type=str, default="", help="Optional: Path to an existing .bin network to bootstrap from.")
+    parser.add_argument("--epochs-per-iter", type=int, default=20, help="Number of training epochs per iteration.")
+    
+    args = parser.parse_args()
+    
+    current_nnue = args.start_nnue
+    engine_path = str(PROJECT_ROOT / "engine" / "build" / "duchess_cli")
+    
+    if not os.path.exists(engine_path):
+        logger.error(f"Engine not found at {engine_path}. Please build the C++ engine first.")
+        sys.exit(1)
+        
+    for i in range(1, args.iterations + 1):
+        logger.info(f"\n=========================================================")
+        logger.info(f"               STARTING ITERATION {i}/{args.iterations}")
+        logger.info(f"=========================================================\n")
+        
+        # 1. Self-Play
+        selfplay_cmd = [
+            PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "selfplay.py"),
+            "--games", str(args.games_per_iter),
+            "--threads", str(args.threads),
+            "--engine", engine_path
+        ]
+        if current_nnue and os.path.exists(current_nnue):
+            selfplay_cmd.extend(["--nnue", current_nnue])
+            logger.info(f"Using network weights from: {current_nnue}")
+        else:
+            logger.info("Using hardcoded classical evaluation.")
+            
+        if not run_step("Self-Play Generation", selfplay_cmd):
+            sys.exit(1)
+            
+        # 2. Extract Dataset
+        jsonl_path = str(PROJECT_ROOT / "nnue" / f"dataset_iter_{i}.jsonl")
+        dataset_cmd = [
+            PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "dataset.py"),
+            "--out", jsonl_path,
+            "--games", str(args.games_per_iter * 2) # Grab recent games
+        ]
+        if not run_step("Dataset Extraction", dataset_cmd):
+            sys.exit(1)
+            
+        # 3. Train Model
+        pt_path = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i}.pt")
+        train_cmd = [
+            PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "train.py"),
+            "--data", jsonl_path,
+            "--out", pt_path,
+            "--epochs", str(args.epochs_per_iter)
+        ]
+        if not run_step("PyTorch Training", train_cmd):
+            sys.exit(1)
+            
+        # 4. Export to C++ Bin
+        bin_path = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i}.bin")
+        export_cmd = [
+            PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "export.py"),
+            pt_path,
+            bin_path
+        ]
+        if not run_step("Model Export", export_cmd):
+            sys.exit(1)
+            
+        # Optional: Save a copy to the standard path so the GUI can pick it up immediately
+        std_bin_path = str(PROJECT_ROOT / "nnue" / "duchess.bin")
+        try:
+            import shutil
+            shutil.copy2(bin_path, std_bin_path)
+        except Exception as e:
+            logger.warning(f"Could not copy latest .bin to standard path: {e}")
+            
+        # Update current network for the next iteration!
+        current_nnue = std_bin_path
+        logger.info(f"Iteration {i} complete! Engine successfully bootstrapped to new network.")
+
+    logger.info("\n==== REINFORCEMENT LEARNING PIPELINE COMPLETE ====")
+
+if __name__ == "__main__":
+    main()
