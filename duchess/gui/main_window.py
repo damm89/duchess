@@ -16,6 +16,7 @@ from duchess.attacks import compute_attack_maps
 from duchess.gui.board_widget import ChessBoardWidget
 from duchess.gui.eval_bar import EvaluationBar
 from duchess.gui.opening_explorer import OpeningExplorerWidget
+from duchess.gui.database_window import DatabaseExplorerDialog
 from duchess.gui.worker import EngineWorker
 
 
@@ -112,12 +113,18 @@ class MainWindow(QMainWindow):
         book_label_text = engine.book_name or "None"
         self._book_label = QLabel(f"Book: {book_label_text}")
         book_layout.addWidget(self._book_label)
-        btn_load_book = QPushButton("Load Book...")
-        btn_load_book.clicked.connect(self._load_custom_book)
-        book_layout.addWidget(btn_load_book)
-        btn_reset_book = QPushButton("Reset to Default (gm2001)")
-        btn_reset_book.clicked.connect(self._reset_default_book)
-        book_layout.addWidget(btn_reset_book)
+        book_btn = QPushButton("Load Book...")
+        book_btn.clicked.connect(self._load_custom_book)
+        book_layout.addWidget(book_btn)
+
+        book_reset = QPushButton("Reset to Default (gm2001)")
+        book_reset.clicked.connect(self._reset_default_book)
+        book_layout.addWidget(book_reset)
+        
+        db_explorer_btn = QPushButton("Colossal Database Explorer")
+        db_explorer_btn.clicked.connect(self._open_db_explorer)
+        book_layout.addWidget(db_explorer_btn)
+
         book_box.setLayout(book_layout)
         controls.addWidget(book_box)
 
@@ -443,3 +450,55 @@ class MainWindow(QMainWindow):
 
         if board.is_game_over():
             self._handle_game_over()
+
+    # --- Database Explorer ---
+
+    def _open_db_explorer(self):
+        """Open the PostgreSQL Master Database explorer."""
+        dialog = DatabaseExplorerDialog(self)
+        dialog.game_selected.connect(self._play_pgn)
+        dialog.exec()
+
+    def _play_pgn(self, pgn_text: str):
+        """Reset the board and replay a raw PGN move text sequence."""
+        self._new_game("white")  # reset board and stop engines
+        
+        board = self._board_widget.board
+        tokens = pgn_text.split()
+        
+        self._log.clear()
+        
+        # We need to temporarily disable validation bounds because SAN parsing needs piece locations
+        # and rapid pushing requires the engine to keep up.
+        # It's better to just push each move sequentially.
+        
+        for token in tokens:
+            # Skip move numbers (e.g. "1.", "12...") and results
+            if "." in token or token in ["1-0", "0-1", "1/2-1/2", "*"]:
+                if "." in token:
+                    self._log.insertPlainText(f"{token} ")
+                elif token in ["1-0", "0-1", "1/2-1/2", "*"]:
+                    self._log.insertPlainText(f"\nResult: {token}")
+                continue
+                
+            try:
+                # Parse SAN token to Move object
+                move = board.parse_san(token)
+                board.push(move)
+                
+                # Log the move text format manually since we don't have turn state available here
+                self._log.insertPlainText(f"{token} ")
+                if board.turn == "white":
+                    self._log.insertPlainText("\n")
+                
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to parse SAN move %s from DB: %s", token, e)
+                break
+
+        self._board_widget._selected_sq = None
+        self._board_widget.clear_arrows()
+        self._board_widget._sync_pieces()
+        self._refresh_heatmap()
+        self._explorer.update_position(board.fen())
+        self._status.showMessage("Loaded master game from database.")

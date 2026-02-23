@@ -23,3 +23,16 @@ def db_session():
     yield session
     session.close()
     Base.metadata.drop_all(bind=db_engine)
+
+
+@pytest.fixture(autouse=True)
+def mock_lichess_api_globally(request):
+    """Prevent the opening explorer from spawning network threads during GUI tests.
+    We skip this mock for test_opening_explorer.py which tests the client directly."""
+    if "test_opening_explorer" in request.module.__name__:
+        yield
+        return
+    
+    from unittest.mock import patch
+    with patch("duchess.lichess_api.LichessExplorerClient.query", return_value={"total": 0, "moves": [], "opening": None}):
+        yield

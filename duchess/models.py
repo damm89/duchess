@@ -54,3 +54,20 @@ class Move(Base):
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     game = relationship("Game", back_populates="moves")
+
+
+class MasterGame(Base):
+    __tablename__ = "master_games"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event = Column(String, index=True)
+    date = Column(String)
+    white = Column(String, index=True, nullable=False)
+    black = Column(String, index=True, nullable=False)
+    result = Column(String, index=True)
+    white_elo = Column(Integer)
+    black_elo = Column(Integer)
+    eco = Column(String, index=True)
+    
+    # The full raw text of the moves (e.g. "1. e4 e5 ...")
+    move_text = Column(Text, nullable=False)
