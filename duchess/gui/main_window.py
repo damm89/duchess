@@ -104,6 +104,22 @@ class MainWindow(QMainWindow):
         self._btn_heatmap.clicked.connect(self._toggle_heatmap)
         controls.addWidget(self._btn_heatmap)
 
+        # Opening book controls
+        book_box = QGroupBox("Opening Book")
+        book_layout = QVBoxLayout()
+        engine = get_engine()
+        book_label_text = engine.book_name or "None"
+        self._book_label = QLabel(f"Book: {book_label_text}")
+        book_layout.addWidget(self._book_label)
+        btn_load_book = QPushButton("Load Book...")
+        btn_load_book.clicked.connect(self._load_custom_book)
+        book_layout.addWidget(btn_load_book)
+        btn_reset_book = QPushButton("Reset to Default (gm2001)")
+        btn_reset_book.clicked.connect(self._reset_default_book)
+        book_layout.addWidget(btn_reset_book)
+        book_box.setLayout(book_layout)
+        controls.addWidget(book_box)
+
         controls.addStretch()
 
         # Layout: eval bar | board | controls
@@ -359,3 +375,23 @@ class MainWindow(QMainWindow):
         pieces = [self._board_widget.board.piece_at_sq(sq) for sq in range(64)]
         w, b = compute_attack_maps(pieces)
         self._board_widget.set_heatmap(w, b, self._player_color)
+
+    # --- Opening Book ---
+
+    def _load_custom_book(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Opening Book", "",
+            "Polyglot Book Files (*.bin);;All Files (*)"
+        )
+        if path:
+            engine = get_engine()
+            engine.set_book(path)
+            self._book_label.setText(f"Book: {engine.book_name}")
+            self._status.showMessage(f"Loaded opening book: {engine.book_name}")
+
+    def _reset_default_book(self):
+        engine = get_engine()
+        engine.reset_book()
+        name = engine.book_name or "None"
+        self._book_label.setText(f"Book: {name}")
+        self._status.showMessage(f"Reset to default opening book: {name}")

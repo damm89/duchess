@@ -85,26 +85,57 @@ class UCIEngine:
         self._read_until("readyok")
 
         # Auto-load opening book for the default Duchess engine
+        self._book_path = None
+        self._book_name = None
         if engine_path is None:
-            book_path = self._find_book()
+            book_path = self._find_default_book()
             if book_path:
-                self._send(f"setoption name BookFile value {book_path}")
-                self._send("isready")
-                self._read_until("readyok")
+                self.set_book(book_path)
 
     @staticmethod
-    def _find_book():
-        """Locate the opening book file."""
+    def _find_default_book():
+        """Locate the default gm2001 opening book file."""
         candidates = [
-            Path(__file__).resolve().parent.parent / "data" / "book.bin",
+            Path(__file__).resolve().parent.parent / "data" / "gm2001.bin",
         ]
         base = getattr(sys, '_MEIPASS', None)
         if base:
-            candidates.insert(0, Path(base) / "data" / "book.bin")
+            candidates.insert(0, Path(base) / "data" / "gm2001.bin")
         for p in candidates:
             if p.exists():
                 return str(p)
         return None
+
+    @property
+    def book_name(self):
+        """Return the display name of the current opening book, or None."""
+        return self._book_name
+
+    def set_book(self, path):
+        """Load an opening book from the given path."""
+        with self._lock:
+            self._send(f"setoption name BookFile value {path}")
+            self._send("isready")
+            self._read_until("readyok")
+        self._book_path = path
+        self._book_name = Path(path).stem
+
+    def disable_book(self):
+        """Disable the opening book."""
+        with self._lock:
+            self._send("setoption name OwnBook value false")
+            self._send("isready")
+            self._read_until("readyok")
+        self._book_path = None
+        self._book_name = None
+
+    def reset_book(self):
+        """Reset to the default gm2001 opening book."""
+        path = self._find_default_book()
+        if path:
+            self.set_book(path)
+        else:
+            self.disable_book()
 
     def _send(self, cmd):
         self._proc.stdin.write(cmd + "\n")
