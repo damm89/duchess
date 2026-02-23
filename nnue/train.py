@@ -87,12 +87,15 @@ def collate_fn(batch):
     )
 
 def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epochs=10, batch_size=256, lr=1e-3):
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training on device: {device}")
+    
     dataset = NNUEDataset(data_file)
     # If the dataset is too small, reduce the batch size
     actual_batch = min(batch_size, max(1, len(dataset)))
     dataloader = DataLoader(dataset, batch_size=actual_batch, shuffle=True, collate_fn=collate_fn)
     
-    model = HalfKP()
+    model = HalfKP().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
@@ -100,6 +103,10 @@ def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epoch
         model.train()
         total_loss = 0.0
         for u_idx, u_off, t_idx, t_off, targets in dataloader:
+            u_idx, u_off = u_idx.to(device), u_off.to(device)
+            t_idx, t_off = t_idx.to(device), t_off.to(device)
+            targets = targets.to(device)
+            
             optimizer.zero_grad()
             
             preds = model(u_idx, u_off, t_idx, t_off)

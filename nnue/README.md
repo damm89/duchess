@@ -12,8 +12,8 @@ You have two options to generate the positional evaluation dataset required for 
 **Option A: Duchess Self-Play (Recommended)**
 Instead of downloading massive human game databases, Duchess can play against herself from randomized starting positions to generate unbiased, high-quality games. These games are automatically saved to your local database.
 ```bash
-# Run 10,000 games of the engine against itself on all CPU cores
-python nnue/selfplay.py --games 10000 --depth 4 --random-plies 8
+# Run 10,000 games of the engine against itself on all CPU cores (e.g., 10 for Apple M4)
+python nnue/selfplay.py --games 10000 --threads 10 --depth 4 --random-plies 8
 ```
 *(Note: A "ply" in chess terminology is a half-move, i.e., one turn taken by one player. So `--random-plies 8` means the game will begin with 4 full moves of completely random play before the engine takes over, ensuring the generated dataset is rich and diverse.)*
 
@@ -32,6 +32,9 @@ python nnue/dataset.py --games 50000 --out nnue/dataset.jsonl --depth 4
 
 ### 2. Train the Model
 Once you have the `dataset.jsonl` file, you can train the `HalfKP` PyTorch architecture using Mean Squared Error (MSE) loss. The resulting model is saved as a PyTorch `.pt` file.
+
+> [!TIP]
+> **Apple Silicon Acceleration:** PyTorch in `train.py` detects if you are on an Apple Silicon chip (M1/M2/M3/M4) and will automatically utilize the `mps` (Metal Performance Shaders) GPU backend if available, vastly accelerating training compared to standard CPU execution.
 
 ```bash
 python nnue/train.py --data nnue/dataset.jsonl --out nnue/duchess_nnue.pt --epochs 20
