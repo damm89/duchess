@@ -16,6 +16,7 @@ __pycache__/
 
 # Logs
 crash.log
+error_debug.log
 
 # Claude / agent
 .claude/
