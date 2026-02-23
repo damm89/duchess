@@ -98,12 +98,18 @@ class EngineManager(QObject):
 
     def stop_all(self):
         """Cleanly stop and join all running engine workers."""
+        # Send 'stop' to all engines first so they emit bestmove and unblock workers
+        try:
+            get_engine().send_stop()
+        except Exception:
+            pass
+        for engine in self._engines:
+            try:
+                engine.send_stop()
+            except Exception:
+                pass
+
         for worker in list(self._workers.values()):
-            # We don't have a clean "stop" mechanism for UCIEngine searches mid-run
-            # so we just let them finish or wait for them in QThread.wait().
-            # Depending on how the GUI is implemented, we might just clear references
-            # or try to send a stop command to the underlying wrapper.
-            # For now, we wait.
             if worker.isRunning():
                 worker.wait(3000)
         self._workers.clear()

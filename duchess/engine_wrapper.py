@@ -270,6 +270,14 @@ class UCIEngine:
             self._send("isready")
             self._read_until("readyok")
 
+    def send_stop(self):
+        """Send 'stop' without acquiring the lock — safe to call while search is running."""
+        try:
+            self._proc.stdin.write("stop\n")
+            self._proc.stdin.flush()
+        except Exception:
+            pass
+
     def quit(self):
         try:
             with self._lock:
