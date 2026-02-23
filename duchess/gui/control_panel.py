@@ -3,9 +3,10 @@
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox, 
-    QTextEdit, QGroupBox, QGridLayout
+    QTextEdit, QGroupBox, QGridLayout, QHBoxLayout
 )
 from duchess.gui.opening_explorer import OpeningExplorerWidget
+from duchess.gui.accordion import AccordionWidget
 
 # Thinking time options: (label, milliseconds)
 TIME_OPTIONS = [
@@ -71,47 +72,48 @@ class ControlPanelWidget(QWidget):
         self._analysis_box.setLayout(self._analysis_layout)
         controls.addWidget(self._analysis_box)
 
-        # Load external engine button
+        # Advanced Settings Accordion
+        accordion = AccordionWidget()
+        
+        # 1. External Engines
+        engine_sec = accordion.add_section("External Engines")
         btn_load = QPushButton("Load External Engine...")
         btn_load.clicked.connect(self.load_external_engine_requested.emit)
-        controls.addWidget(btn_load)
-
+        engine_sec.add_widget(btn_load)
+        
         # Threat heatmap toggle
         self._btn_heatmap = QPushButton("Threat Heatmap")
         self._btn_heatmap.setCheckable(True)
         self._btn_heatmap.clicked.connect(self.heatmap_toggled.emit)
-        controls.addWidget(self._btn_heatmap)
+        engine_sec.add_widget(self._btn_heatmap)
 
-        # Opening book controls
-        book_box = QGroupBox("Opening Book")
-        book_layout = QVBoxLayout()
+        # 2. Opening Books & Database
+        book_sec = accordion.add_section("Opening Book & Database")
         self._book_label = QLabel(f"Book: {book_name or 'None'}")
-        book_layout.addWidget(self._book_label)
+        book_sec.add_widget(self._book_label)
+        
         book_btn = QPushButton("Load Book...")
         book_btn.clicked.connect(self.load_book_requested.emit)
-        book_layout.addWidget(book_btn)
+        book_sec.add_widget(book_btn)
 
-        book_reset = QPushButton("Reset to Default (gm2001)")
+        book_reset = QPushButton("Reset to Default")
         book_reset.clicked.connect(self.reset_book_requested.emit)
-        book_layout.addWidget(book_reset)
+        book_sec.add_widget(book_reset)
         
         db_explorer_btn = QPushButton("Colossal Database Explorer")
         db_explorer_btn.clicked.connect(self.db_explorer_requested.emit)
-        book_layout.addWidget(db_explorer_btn)
+        book_sec.add_widget(db_explorer_btn)
 
-        book_box.setLayout(book_layout)
-        controls.addWidget(book_box)
-
-        # Syzygy Tablebases controls
-        syzygy_box = QGroupBox("Syzygy Tablebases")
-        syzygy_layout = QVBoxLayout()
+        # 3. Syzygy Tablebases
+        syzygy_sec = accordion.add_section("Syzygy Tablebases")
         self._tb_label = QLabel("Files: None")
-        syzygy_layout.addWidget(self._tb_label)
+        syzygy_sec.add_widget(self._tb_label)
+        
         tb_btn = QPushButton("Select Files (.rtbw/.rtbz)")
         tb_btn.clicked.connect(self._select_syzygy_files)
-        syzygy_layout.addWidget(tb_btn)
-        syzygy_box.setLayout(syzygy_layout)
-        controls.addWidget(syzygy_box)
+        syzygy_sec.add_widget(tb_btn)
+
+        controls.addWidget(accordion)
 
         # Opening Explorer panel (data from Lichess Masters database)
         self._explorer = OpeningExplorerWidget()
