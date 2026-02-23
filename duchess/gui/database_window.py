@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """DatabaseExplorerWidget — search and filter historical master games."""
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtWidgets import (
@@ -269,21 +271,13 @@ class DatabaseExplorerDialog(QDialog):
             return
 
         # Ask whether to flag these games for training
-        from PyQt6.QtWidgets import QDialog as _QD, QDialogButtonBox
-        dlg = _QD(self)
-        dlg.setWindowTitle("Import Options")
-        dlg_layout = QVBoxLayout(dlg)
-        dlg_layout.addWidget(QLabel(f"Importing: {path.split('/')[-1]}"))
-        training_cb = QCheckBox("Include these games for NNUE training")
-        dlg_layout.addWidget(training_cb)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        dlg_layout.addWidget(buttons)
-        if dlg.exec() != _QD.DialogCode.Accepted:
-            return
-
-        training_use = training_cb.isChecked()
+        reply = QMessageBox.question(
+            self, "Training Data",
+            "Include these games for NNUE training?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        training_use = reply == QMessageBox.StandardButton.Yes
 
         # Disable UI during import
         self._import_btn.setEnabled(False)

@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """ChessEngine — wraps the UCI engine subprocess for search."""
 from duchess.engine_wrapper import get_engine
 

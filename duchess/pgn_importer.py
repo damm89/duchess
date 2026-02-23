@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """High-performance parser for massive PGN databases.
 
 Reads PGN files sequentially, extracts headers and move text,

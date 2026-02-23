@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text

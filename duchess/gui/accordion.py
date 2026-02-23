@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 from PyQt6.QtCore import Qt, pyqtProperty, pyqtSignal, QPropertyAnimation, QAbstractAnimation
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QScrollArea, QFrame, QSizePolicy, QToolButton

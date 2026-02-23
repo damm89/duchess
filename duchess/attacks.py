@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """Pure-Python attack map computation for threat heatmaps.
 
 Computes, for every square on the board, how many white and black pieces

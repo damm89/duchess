@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """EngineManager — manages background engine calculation threads."""
 from PyQt6.QtCore import QObject, pyqtSignal
 

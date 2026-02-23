@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """EngineWorker — runs engine search on a background QThread."""
 from PyQt6.QtCore import QThread, pyqtSignal
 

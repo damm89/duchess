@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """Control panel widget for Duchess, extracted from MainWindow for cleaner UI composition."""
 
 from PyQt6.QtCore import pyqtSignal, Qt

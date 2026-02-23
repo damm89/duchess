@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 import argparse
 import logging
 import sys
@@ -28,12 +30,20 @@ def main():
     if args.mode == "gui":
         try:
             import sys
+            from pathlib import Path
             from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtGui import QIcon
             from duchess.gui.main_window import MainWindow
         except ImportError:
             logger.error("PyQt6 is required for GUI mode. Install it with: pip install PyQt6")
             return
         app = QApplication(sys.argv)
+        app.setApplicationName("Duchess Chess")
+        # Set app icon (shows in macOS dock and taskbar)
+        base = getattr(sys, '_MEIPASS', None)
+        icon_path = Path(base) / "assets" / "duchess_icon.png" if base else Path(__file__).resolve().parent.parent / "assets" / "duchess_icon.png"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
         window = MainWindow()
         window.show()
         sys.exit(app.exec())

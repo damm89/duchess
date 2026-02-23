@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """ChessBoardWidget — interactive chess board using QGraphicsView/QGraphicsScene."""
 import sys
 import logging

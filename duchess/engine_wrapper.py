@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """UCI engine subprocess wrapper — communicates with duchess_cli via stdin/stdout."""
 import os
 import sys
@@ -43,19 +45,26 @@ def _parse_info_line(line):
 
 def _engine_path():
     """Locate the duchess_cli binary."""
+    exe_name = "duchess_cli.exe" if os.name == "nt" else "duchess_cli"
+    
     # PyInstaller bundle
     base = getattr(sys, '_MEIPASS', None)
     if base:
-        p = Path(base) / "duchess_cli"
+        p = Path(base) / exe_name
         if p.exists():
             return str(p)
 
     # Development: engine/build/duchess_cli
-    dev = Path(__file__).resolve().parent.parent / "engine" / "build" / "duchess_cli"
+    dev = Path(__file__).resolve().parent.parent / "engine" / "build" / exe_name
     if dev.exists():
         return str(dev)
+        
+    # Windows MSVC Release folder
+    dev_release = Path(__file__).resolve().parent.parent / "engine" / "build" / "Release" / exe_name
+    if dev_release.exists():
+        return str(dev_release)
 
-    raise FileNotFoundError("Cannot find duchess_cli binary")
+    raise FileNotFoundError(f"Cannot find {exe_name} binary")
 
 
 class UCIEngine:

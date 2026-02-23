@@ -126,6 +126,29 @@ cd engine/build && ctest --output-on-failure
 
 ---
 
+## Credits
+
+**Author:** Daniel Ammeraal
+
+### Third-party libraries and data
+
+| Component | License | Notes |
+|---|---|---|
+| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) | GPL v3 | Python bindings for Qt 6 |
+| [python-chess](https://python-chess.readthedocs.io/) | GPL v3 | PGN parsing and self-play game management |
+| [SQLAlchemy](https://www.sqlalchemy.org/) | MIT | Database ORM for game storage |
+| [Alembic](https://alembic.sqlalchemy.org/) | MIT | Database migration management |
+| [PyTorch](https://pytorch.org/) | BSD | NNUE training pipeline |
+| [Catch2](https://github.com/catchorg/Catch2) | BSL-1.0 | C++ test framework for engine tests |
+| [Fathom](https://github.com/jdart1/Fathom) | MIT | Syzygy tablebase probing library |
+| gm2001.bin | Public domain | Polyglot opening book compiled from GM games |
+
+### AI assistance
+
+Parts of this codebase were developed with assistance from [Claude](https://claude.ai) by Anthropic.
+
+---
+
 ## License
 
-*To be determined.*
+MIT License. See [LICENSE](LICENSE) for details.

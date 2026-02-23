@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """DuchessBoard — wraps the UCI engine subprocess with SAN support."""
 from duchess.chess_types import Piece, Color, Move
 from duchess.engine_wrapper import get_engine

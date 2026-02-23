@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """Pure-Python chess types matching the C++ engine's Piece/Color enums and Move struct."""
 from enum import IntEnum
 

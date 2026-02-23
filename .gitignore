@@ -39,4 +39,4 @@ compacted.txt
 
 # Agent instructions (not part of the app)
 agent_instructions/
-**/engine_phase1_instructions.mderror_debug.log
+**/engine_phase1_instructions.md
