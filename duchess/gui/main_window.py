@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Duchess Chess")
         self.resize(900, 650)
+        self.setMinimumSize(660, 500)
         if ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(ICON_PATH)))
 

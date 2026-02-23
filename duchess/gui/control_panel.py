@@ -3,7 +3,8 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox, 
-    QTextEdit, QGroupBox, QGridLayout, QHBoxLayout, QScrollArea, QFrame
+    QTextEdit, QGroupBox, QGridLayout, QHBoxLayout, QScrollArea, QFrame,
+    QSizePolicy
 )
 from duchess.gui.opening_explorer import OpeningExplorerWidget
 from duchess.gui.accordion import AccordionWidget
@@ -42,6 +43,7 @@ class ControlPanelWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
 
         content = QWidget()
         controls = QVBoxLayout(content)

@@ -49,6 +49,7 @@ class AccordionSection(QWidget):
         # Animation
         self.toggle_animation = QPropertyAnimation(self, b"maximumHeight")
         self.toggle_animation.setDuration(200)
+        self.toggle_animation.finished.connect(self._on_animation_finished)
 
     @pyqtProperty(int)
     def maximumHeight(self):
@@ -74,6 +75,17 @@ class AccordionSection(QWidget):
             self.toggle_animation.setEndValue(0)
 
         self.toggle_animation.start()
+
+    def _on_animation_finished(self):
+        """After collapse, ask the top-level window to reclaim freed space."""
+        if self.content_area.maximumHeight() == 0:
+            window = self.window()
+            if window:
+                hint = window.sizeHint()
+                current = window.size()
+                new_h = min(current.height(), max(hint.height(), window.minimumHeight()))
+                if new_h < current.height():
+                    window.resize(current.width(), new_h)
 
     def add_widget(self, widget: QWidget):
         self.main_layout.addWidget(widget)
