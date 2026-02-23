@@ -1,9 +1,9 @@
 """Control panel widget for Duchess, extracted from MainWindow for cleaner UI composition."""
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QComboBox, 
-    QTextEdit, QGroupBox, QGridLayout, QHBoxLayout
+    QTextEdit, QGroupBox, QGridLayout, QHBoxLayout, QScrollArea, QFrame
 )
 from duchess.gui.opening_explorer import OpeningExplorerWidget
 from duchess.gui.accordion import AccordionWidget
@@ -35,7 +35,16 @@ class ControlPanelWidget(QWidget):
         self._setup_ui(initial_book_name)
 
     def _setup_ui(self, book_name):
-        controls = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        content = QWidget()
+        controls = QVBoxLayout(content)
         controls.setContentsMargins(0, 0, 0, 0)
         
         # New Game / Resign
@@ -121,7 +130,8 @@ class ControlPanelWidget(QWidget):
         controls.addWidget(self._explorer)
 
         controls.addStretch()
-        self.setLayout(controls)
+        scroll.setWidget(content)
+        main_layout.addWidget(scroll)
 
     def selected_time_ms(self) -> int:
         return TIME_OPTIONS[self._time_combo.currentIndex()][1]
