@@ -15,6 +15,7 @@ from duchess.engine_wrapper import UCIEngine, get_engine
 from duchess.attacks import compute_attack_maps
 from duchess.gui.board_widget import ChessBoardWidget
 from duchess.gui.eval_bar import EvaluationBar
+from duchess.gui.opening_explorer import OpeningExplorerWidget
 from duchess.gui.worker import EngineWorker
 
 
@@ -120,6 +121,11 @@ class MainWindow(QMainWindow):
         book_box.setLayout(book_layout)
         controls.addWidget(book_box)
 
+        # Opening Explorer panel (data from Lichess Masters database)
+        self._explorer = OpeningExplorerWidget()
+        self._explorer.move_clicked.connect(self._on_explorer_move)
+        controls.addWidget(self._explorer)
+
         controls.addStretch()
 
         # Layout: eval bar | board | controls
@@ -203,6 +209,9 @@ class MainWindow(QMainWindow):
             row["score"].setText("--")
             row["pv"].setText("")
 
+        # Refresh opening explorer for starting position
+        self._explorer.update_position(self._board_widget.board.fen())
+
         if color == "white":
             self._status.showMessage("Your move (White).")
         else:
@@ -238,6 +247,7 @@ class MainWindow(QMainWindow):
         self._board_widget.setEnabled(False)
         self._status.showMessage("Engine is thinking...")
         self._refresh_heatmap()
+        self._explorer.update_position(self._board_widget.board.fen())
         self._start_engine()
 
     # --- Engine ---
@@ -340,6 +350,7 @@ class MainWindow(QMainWindow):
         turn = "White" if board.turn == "white" else "Black"
         self._status.showMessage(f"Your move ({turn}).")
         self._refresh_heatmap()
+        self._explorer.update_position(board.fen())
         self._workers.clear()
 
     # --- Game over ---
@@ -395,3 +406,40 @@ class MainWindow(QMainWindow):
         name = engine.book_name or "None"
         self._book_label.setText(f"Book: {name}")
         self._status.showMessage(f"Reset to default opening book: {name}")
+
+    # --- Opening Explorer ---
+
+    def _on_explorer_move(self, uci):
+        """Handle a move clicked in the Opening Explorer panel."""
+        board = self._board_widget.board
+
+        # Verify the move is legal
+        from duchess.chess_types import Move
+        move = Move.from_uci(uci)
+        legal_ucis = [m.to_uci() for m in board.legal_moves]
+        if uci not in legal_ucis:
+            return
+
+        san = board.san(move)
+
+        # Log the move
+        if board.turn == "white":
+            self._log.insertPlainText(f"{self._move_number}. {san} ")
+        else:
+            self._log.insertPlainText(f"{san}\n")
+            self._move_number += 1
+
+        # Push the move
+        board.push(move)
+        self._board_widget._last_move_from = move.from_sq
+        self._board_widget._last_move_to = move.to_sq
+        self._board_widget._selected_sq = None
+        self._board_widget.clear_arrows()
+        self._board_widget._sync_pieces()
+
+        # Update explorer for new position
+        self._explorer.update_position(board.fen())
+        self._refresh_heatmap()
+
+        if board.is_game_over():
+            self._handle_game_over()
