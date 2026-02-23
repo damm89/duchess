@@ -1,6 +1,6 @@
-"""DuchessBoard — wraps the C++ duchess_engine.Board with SAN support."""
-import duchess_engine
-from duchess_engine import Board as _CppBoard, Move as _CppMove, Piece, Color
+"""DuchessBoard — wraps the UCI engine subprocess with SAN support."""
+from duchess.chess_types import Piece, Color, Move
+from duchess.engine_wrapper import get_engine
 
 UNICODE_PIECES = {
     "R": "\u2656", "N": "\u2658", "B": "\u2657", "Q": "\u2655", "K": "\u2654", "P": "\u2659",
@@ -30,6 +30,14 @@ RANK_NAMES = "12345678"
 
 STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
+# FEN piece char -> Piece enum
+_FEN_PIECE_MAP = {
+    'P': Piece.WHITE_PAWN, 'N': Piece.WHITE_KNIGHT, 'B': Piece.WHITE_BISHOP,
+    'R': Piece.WHITE_ROOK, 'Q': Piece.WHITE_QUEEN, 'K': Piece.WHITE_KING,
+    'p': Piece.BLACK_PAWN, 'n': Piece.BLACK_KNIGHT, 'b': Piece.BLACK_BISHOP,
+    'r': Piece.BLACK_ROOK, 'q': Piece.BLACK_QUEEN, 'k': Piece.BLACK_KING,
+}
+
 
 def _sq_name(sq):
     return FILE_NAMES[sq % 8] + RANK_NAMES[sq // 8]
@@ -51,6 +59,30 @@ def _is_king(piece):
     return piece in (Piece.WHITE_KING, Piece.BLACK_KING)
 
 
+def _parse_fen_board(fen):
+    """Parse a FEN string and return a list of 64 Piece values (index 0 = a1)."""
+    parts = fen.split()
+    rows = parts[0].split("/")
+    board = [Piece.NONE] * 64
+    for rank_idx, row in enumerate(rows):
+        rank = 7 - rank_idx  # FEN starts from rank 8
+        file = 0
+        for ch in row:
+            if ch.isdigit():
+                file += int(ch)
+            else:
+                sq = rank * 8 + file
+                board[sq] = _FEN_PIECE_MAP.get(ch, Piece.NONE)
+                file += 1
+    return board
+
+
+def _parse_fen_side(fen):
+    """Return 'white' or 'black' from FEN."""
+    parts = fen.split()
+    return "white" if len(parts) < 2 or parts[1] == "w" else "black"
+
+
 class InvalidMoveError(Exception):
     pass
 
@@ -64,69 +96,103 @@ class AmbiguousMoveError(Exception):
 
 
 class DuchessBoard:
-    """Wrapper around the C++ duchess_engine.Board with SAN support."""
+    """Chess board backed by FEN parsing and UCI engine for move generation/validation."""
 
     def __init__(self, fen=None):
-        if fen is None:
-            self._board = _CppBoard()
-        else:
-            self._board = _CppBoard(fen)
+        self._fen = fen if fen else STARTING_FEN
+        self._pieces = _parse_fen_board(self._fen)
+        self._side = _parse_fen_side(self._fen)
+        self._legal_moves_cache = None
+        self._gamestate_cache = None
+
+    def _sync_engine(self):
+        """Set the engine's internal position to match our FEN."""
+        engine = get_engine()
+        engine.set_position_fen(self._fen)
+
+    def _get_legal_move_strings(self):
+        """Get legal moves as UCI strings from the engine."""
+        if self._legal_moves_cache is None:
+            self._sync_engine()
+            engine = get_engine()
+            self._legal_moves_cache = engine.get_legal_moves()
+        return self._legal_moves_cache
+
+    def _invalidate_cache(self):
+        self._legal_moves_cache = None
+        self._gamestate_cache = None
 
     @property
     def turn(self):
-        return "white" if self._board.side_to_move() == Color.WHITE else "black"
+        return self._side
 
     @property
     def legal_moves(self):
-        return self._board.generate_legal_moves()
+        """Return list of Move objects for all legal moves."""
+        return [Move.from_uci(s) for s in self._get_legal_move_strings()]
 
     def fen(self):
-        return self._board.to_fen()
+        return self._fen
 
     def get_fen(self):
-        return self.fen()
+        return self._fen
+
+    def piece_at_sq(self, sq):
+        return self._pieces[sq]
 
     def make_move_uci(self, uci_str):
         """Try to make a UCI move. Returns True if legal, False otherwise."""
-        move = _CppMove.from_uci(uci_str)
-        legal = self._board.generate_legal_moves()
-        for lm in legal:
-            if lm.from_sq == move.from_sq and lm.to_sq == move.to_sq and lm.promotion == move.promotion:
-                self._board.make_move(lm)
-                return True
-        return False
+        legal = self._get_legal_move_strings()
+        if uci_str not in legal:
+            return False
+        self._apply_move_uci(uci_str)
+        return True
 
     def push(self, move):
-        self._board.make_move(move)
+        """Push a Move object."""
+        self._apply_move_uci(move.to_uci())
 
     def push_uci(self, uci_str):
-        move = _CppMove.from_uci(uci_str)
-        self._board.make_move(move)
+        self._apply_move_uci(uci_str)
 
-    def piece_at_sq(self, sq):
-        return self._board.piece_at_sq(sq)
+    def _apply_move_uci(self, uci_str):
+        """Apply a move and update the FEN from the engine."""
+        self._sync_engine()
+        engine = get_engine()
+        engine.set_position_fen(self._fen, [uci_str])
+        self._fen = engine.get_fen()
+        self._pieces = _parse_fen_board(self._fen)
+        self._side = _parse_fen_side(self._fen)
+        self._invalidate_cache()
 
     def is_game_over(self):
-        return len(self._board.generate_legal_moves()) == 0
+        return len(self._get_legal_move_strings()) == 0
 
     def result(self):
         if not self.is_game_over():
             return "*"
-        if duchess_engine.is_checkmate(self._board):
-            if self._board.side_to_move() == Color.WHITE:
-                return "0-1"
-            else:
-                return "1-0"
+        self._sync_engine()
+        engine = get_engine()
+        state = engine.get_gamestate()
+        if state == "checkmate":
+            return "0-1" if self._side == "white" else "1-0"
         return "1/2-1/2"
 
     def is_attacked(self, sq, color):
-        return self._board.is_attacked(sq, color)
+        """Check if sq is attacked by the given color. color can be Color enum or string."""
+        self._sync_engine()
+        engine = get_engine()
+        if isinstance(color, Color):
+            color_str = "white" if color == Color.WHITE else "black"
+        else:
+            color_str = color
+        return engine.is_attacked(sq, color_str)
 
     def san(self, move):
         """Convert a move to SAN. Must be called BEFORE the move is made."""
-        piece = self._board.piece_at_sq(move.from_sq)
+        piece = self._pieces[move.from_sq]
         to_name = _sq_name(move.to_sq)
-        captured = self._board.piece_at_sq(move.to_sq)
+        captured = self._pieces[move.to_sq]
 
         # Castling
         if _is_king(piece) and abs(move.from_sq - move.to_sq) == 2:
@@ -153,26 +219,31 @@ class DuchessBoard:
             else:
                 san_str = char + disambig + to_name
 
-        # Check / checkmate suffix
-        copy = _CppBoard(self._board.to_fen())
-        copy.make_move(move)
-        copy_legal = copy.generate_legal_moves()
-        if len(copy_legal) == 0 and duchess_engine.is_checkmate(copy):
-            san_str += "#"
+        # Check / checkmate suffix — make the move on a copy board
+        copy = DuchessBoard(self._fen)
+        copy._apply_move_uci(move.to_uci())
+        copy_legal = copy._get_legal_move_strings()
+        if len(copy_legal) == 0:
+            # Could be checkmate or stalemate
+            copy._sync_engine()
+            engine = get_engine()
+            state = engine.get_gamestate()
+            if state == "checkmate":
+                san_str += "#"
         else:
-            king_sq = self._find_king(copy, copy.side_to_move())
+            king_sq = copy._find_king(copy._side)
             if king_sq is not None:
-                attacker_color = Color.BLACK if copy.side_to_move() == Color.WHITE else Color.WHITE
-                if copy.is_attacked(king_sq, attacker_color):
+                attacker = "black" if copy._side == "white" else "white"
+                if copy.is_attacked(king_sq, attacker):
                     san_str += "+"
 
         return san_str
 
     def _disambiguate(self, move, piece):
-        legal = self._board.generate_legal_moves()
+        legal = self.legal_moves
         ambiguous = [lm for lm in legal
                      if lm.to_sq == move.to_sq and lm.from_sq != move.from_sq
-                     and self._board.piece_at_sq(lm.from_sq) == piece]
+                     and self._pieces[lm.from_sq] == piece]
         if not ambiguous:
             return ""
         from_file = move.from_sq % 8
@@ -185,27 +256,27 @@ class DuchessBoard:
             return RANK_NAMES[from_rank]
         return FILE_NAMES[from_file] + RANK_NAMES[from_rank]
 
-    def _find_king(self, board, color):
-        king_piece = Piece.WHITE_KING if color == Color.WHITE else Piece.BLACK_KING
+    def _find_king(self, side):
+        king_piece = Piece.WHITE_KING if side == "white" else Piece.BLACK_KING
         for sq in range(64):
-            if board.piece_at_sq(sq) == king_piece:
+            if self._pieces[sq] == king_piece:
                 return sq
         return None
 
     def parse_san(self, san_str):
-        """Parse a SAN string and return the matching legal move."""
+        """Parse a SAN string and return the matching legal Move."""
         san = san_str.strip()
-        legal = self._board.generate_legal_moves()
+        legal = self.legal_moves
 
         # Castling
         if san in ("O-O", "0-0"):
             for m in legal:
-                if _is_king(self._board.piece_at_sq(m.from_sq)) and m.to_sq - m.from_sq == 2:
+                if _is_king(self._pieces[m.from_sq]) and m.to_sq - m.from_sq == 2:
                     return m
             raise IllegalMoveError(f"Castling O-O not legal")
         if san in ("O-O-O", "0-0-0"):
             for m in legal:
-                if _is_king(self._board.piece_at_sq(m.from_sq)) and m.from_sq - m.to_sq == 2:
+                if _is_king(self._pieces[m.from_sq]) and m.from_sq - m.to_sq == 2:
                     return m
             raise IllegalMoveError(f"Castling O-O-O not legal")
 
@@ -216,7 +287,7 @@ class DuchessBoard:
         if "=" in san:
             promo_char = san[-1].lower()
             san = san[:-2]
-            if self._board.side_to_move() == Color.WHITE:
+            if self._side == "white":
                 promotion = PROMOTION_CHARS.get(promo_char, Piece.NONE)
             else:
                 promotion = PROMOTION_CHARS_BLACK.get(promo_char, Piece.NONE)
@@ -238,7 +309,7 @@ class DuchessBoard:
             raise InvalidMoveError(f"Cannot parse SAN: {san_str}")
         to_sq = _name_to_sq(to_name)
 
-        piece_map = CHAR_TO_WHITE_PIECE if self._board.side_to_move() == Color.WHITE else CHAR_TO_BLACK_PIECE
+        piece_map = CHAR_TO_WHITE_PIECE if self._side == "white" else CHAR_TO_BLACK_PIECE
         target_piece = piece_map.get(piece_char)
         if target_piece is None:
             raise InvalidMoveError(f"Unknown piece: {piece_char}")
@@ -247,7 +318,7 @@ class DuchessBoard:
         for m in legal:
             if m.to_sq != to_sq:
                 continue
-            if self._board.piece_at_sq(m.from_sq) != target_piece:
+            if self._pieces[m.from_sq] != target_piece:
                 continue
             if promotion != Piece.NONE and m.promotion != promotion:
                 continue
@@ -293,7 +364,7 @@ class DuchessBoard:
             )
             for file in range(8):
                 sq = rank * 8 + file
-                piece = self._board.piece_at_sq(sq)
+                piece = self._pieces[sq]
                 is_light = (rank + file) % 2 == 1
                 bg = light_bg if is_light else dark_bg
                 char = PIECE_CHARS.get(piece)
@@ -326,7 +397,7 @@ class DuchessBoard:
             row = f"{rank + 1} |"
             for file in range(8):
                 sq = rank * 8 + file
-                piece = self._board.piece_at_sq(sq)
+                piece = self._pieces[sq]
                 char = PIECE_CHARS.get(piece)
                 if char:
                     row += f" {UNICODE_PIECES[char]}"

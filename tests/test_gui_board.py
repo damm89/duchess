@@ -1,7 +1,7 @@
 import pytest
 from PyQt6.QtCore import Qt, QPoint
 from duchess.gui.board_widget import ChessBoardWidget
-from duchess_engine import Piece
+from duchess.chess_types import Piece
 
 # Using pytest-qt's qtbot fixture to test PyQt6 components
 def test_board_widget_initialization(qtbot):
@@ -30,29 +30,18 @@ def test_board_widget_set_fen(qtbot):
     piece_at_e2 = widget.board.piece_at_sq(12)
     assert piece_at_e2 == Piece.WHITE_KING
 
-def test_board_widget_pixel_to_square(qtbot):
-    """Test the internal pixel to square calculation."""
-    widget = ChessBoardWidget()
-    qtbot.addWidget(widget)
-    
-    # Force a resize to simulate a window
-    widget.resize(600, 600)
-    
-    sq_size, x_off, y_off = widget._board_geometry()
+def test_board_widget_scene_to_square(qtbot):
+    """Test the internal scene pos to square calculation."""
+    from duchess.gui.board_widget import _scene_to_sq, SQ_SIZE
+    from PyQt6.QtCore import QPointF
     
     # Click on bottom-left corner -> a1 (index 0)
     # The rank 1 is at the bottom, which is rank_idx = 7 in the widget.
-    # So y coordinate should be y_off + 7 * sq_size + 1
-    # x coordinate should be x_off + 1
-    click_x = x_off + 1
-    click_y = y_off + 7 * sq_size + 1
     
-    sq = widget._pixel_to_square(click_x, click_y)
+    sq = _scene_to_sq(QPointF(1, 7 * SQ_SIZE + 1))
     assert sq == 0
 
     # Click on top-right corner -> h8 (index 63)
     # The rank 8 is at the top, which is rank_idx = 0. File h is file_idx = 7.
-    click_x = x_off + 7 * sq_size + 1
-    click_y = y_off + 1
-    sq = widget._pixel_to_square(click_x, click_y)
+    sq = _scene_to_sq(QPointF(7 * SQ_SIZE + 1, 1))
     assert sq == 63

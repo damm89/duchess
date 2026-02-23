@@ -32,6 +32,18 @@ struct Move {
 
     std::string to_uci() const;
     static Move from_uci(const std::string& uci);
+
+    // Compact encoding for TT storage: 6 bits from, 6 bits to, 4 bits promo
+    uint16_t encode() const {
+        return static_cast<uint16_t>(from_sq | (to_sq << 6) | (static_cast<int>(promotion) << 12));
+    }
+    static Move decode(uint16_t v) {
+        Move m;
+        m.from_sq = v & 0x3F;
+        m.to_sq = (v >> 6) & 0x3F;
+        m.promotion = static_cast<Piece>((v >> 12) & 0xF);
+        return m;
+    }
 };
 
 class Board {
@@ -46,13 +58,23 @@ public:
     void remove_piece_sq(int square);
 
     Color side_to_move() const { return side_to_move_; }
+    uint8_t castling_rights() const { return castling_; }
+    int en_passant_square() const { return en_passant_sq_; }
+    uint64_t hash() const { return hash_; }
     std::string to_fen() const;
 
     std::vector<Move> generate_legal_moves() const;
+    std::vector<Move> generate_tactical_moves() const;
     void make_move(const Move& m);
+    void make_null_move();
 
     // Check if a square is attacked by the given color
     bool is_attacked(int square, Color by) const;
+
+    // Returns true if side to move has non-pawn, non-king pieces
+    bool has_non_pawn_material() const;
+
+    int king_square() const;
 
     // Aggregate bitboards
     Bitboard white_pieces() const;
@@ -67,6 +89,7 @@ private:
     int en_passant_sq_ = -1;  // target square or -1
     int halfmove_clock_ = 0;
     int fullmove_number_ = 1;
+    uint64_t hash_ = 0;
 
     static constexpr uint8_t CASTLE_WK = 1;
     static constexpr uint8_t CASTLE_WQ = 2;
@@ -90,8 +113,7 @@ private:
     void generate_queen_moves(std::vector<Move>& moves) const;
     void generate_king_moves(std::vector<Move>& moves) const;
     void generate_pseudo_legal_moves(std::vector<Move>& moves) const;
-
-    int king_square() const;
+    void generate_pseudo_tactical_moves(std::vector<Move>& moves) const;
 };
 
 }  // namespace duchess

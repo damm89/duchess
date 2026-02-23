@@ -39,7 +39,7 @@ def test_legal_moves():
 
 def test_push_and_pop():
     board = DuchessBoard()
-    from duchess_engine import Move
+    from duchess.chess_types import Move
     m = Move.from_uci("e2e4")
     board.push(m)
     assert board.turn == "black"
@@ -47,28 +47,28 @@ def test_push_and_pop():
 
 def test_san_pawn_move():
     board = DuchessBoard()
-    from duchess_engine import Move
+    from duchess.chess_types import Move
     m = Move.from_uci("e2e4")
     assert board.san(m) == "e4"
 
 
 def test_san_knight_move():
     board = DuchessBoard()
-    from duchess_engine import Move
+    from duchess.chess_types import Move
     m = Move.from_uci("g1f3")
     assert board.san(m) == "Nf3"
 
 
 def test_san_capture():
     board = DuchessBoard("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2")
-    from duchess_engine import Move
+    from duchess.chess_types import Move
     m = Move.from_uci("e4d5")
     assert board.san(m) == "exd5"
 
 
 def test_san_castling():
     board = DuchessBoard("r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4")
-    from duchess_engine import Move
+    from duchess.chess_types import Move
     m = Move.from_uci("e1g1")
     assert board.san(m) == "O-O"
 

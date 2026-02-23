@@ -20,19 +20,21 @@ def test_new_game_white(qtbot):
     assert window._player_color == "white"
     assert window._board_widget.isEnabled() is True
     assert window._status.currentMessage() == "Your move (White)."
-    assert window._worker is None
+    assert len(window._workers) == 0
 
 def test_engine_worker_signal(qtbot):
     """Test that EngineWorker can parse FEN and return a move via signal."""
     fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    worker = EngineWorker(fen, depth=1)  # Depth 1 so it's fast
-    
+    worker = EngineWorker(fen, time_ms=200)  # Short time so it's fast
+
     with qtbot.waitSignal(worker.move_found, timeout=3000) as blocker:
         worker.start()
-        
-    move = blocker.args[0]
-    assert len(move) >= 4  # UCI move like e2e4
-    
+
+    uci_move = blocker.args[0]
+    engine_name = blocker.args[1]
+    assert len(uci_move) >= 4  # UCI move like e2e4
+    assert isinstance(engine_name, str)
+
     # Engine thread cleanup
     worker.wait()
 
@@ -47,13 +49,15 @@ def test_new_game_black(qtbot):
         assert window._player_color == "black"
         assert window._status.currentMessage() == "Engine is thinking..."
         assert window._board_widget.isEnabled() is False
-        assert window._worker is not None
-        
-        # Wait for worker thread to complete its run and emit move_found
-        qtbot.waitSignal(window._worker.move_found, timeout=3000)
-    
+        assert len(window._workers) > 0
+
+        # Wait for the Duchess worker to emit move_found
+        duchess_worker = window._workers.get("__duchess__")
+        assert duchess_worker is not None
+        qtbot.waitSignal(duchess_worker.move_found, timeout=3000)
+
     # After engine moves
     assert window._board_widget.isEnabled() is True
     assert "Your move" in window._status.currentMessage()
-    assert window._worker is None
+    assert len(window._workers) == 0
     assert window._board_widget.board.turn == "black" # It's now black's turn

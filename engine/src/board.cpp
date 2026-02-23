@@ -1,4 +1,5 @@
 #include "board.hpp"
+#include "zobrist.h"
 #include <sstream>
 
 namespace duchess {
@@ -109,6 +110,7 @@ void Board::parse_fen(const std::string& fen) {
 
     halfmove_clock_ = half;
     fullmove_number_ = full;
+    hash_ = compute_zobrist_hash(*this);
 }
 
 Board::Board() { set_starting_position(); }
@@ -474,18 +476,190 @@ std::vector<Move> Board::generate_legal_moves() const {
     return legal;
 }
 
+void Board::generate_pseudo_tactical_moves(std::vector<Move>& moves) const {
+    bool white = (side_to_move_ == Color::White);
+    Bitboard enemies = enemy_pieces();
+    Bitboard occ = occupied();
+
+    // Pawn captures + queen promotions (pushes to promo rank)
+    {
+        Piece pawn = white ? Piece::WhitePawn : Piece::BlackPawn;
+        Bitboard pawns = bb(pawn);
+        int dir = white ? 8 : -8;
+        int promo_rank = white ? 7 : 0;
+        int ep_capture_rank = white ? 4 : 3;
+        int color_idx = white ? 0 : 1;
+
+        Piece promo_q = white ? Piece::WhiteQueen : Piece::BlackQueen;
+        Piece promo_r = white ? Piece::WhiteRook : Piece::BlackRook;
+        Piece promo_b = white ? Piece::WhiteBishop : Piece::BlackBishop;
+        Piece promo_n = white ? Piece::WhiteKnight : Piece::BlackKnight;
+
+        // Push promotions (single push to promo rank only)
+        Bitboard promo_mask = Bitboard(0xFF) << (promo_rank * 8);
+        Bitboard single = white ? (pawns << 8) & ~occ : (pawns >> 8) & ~occ;
+        Bitboard push_promos = single & promo_mask;
+        while (push_promos) {
+            int to = pop_lsb(push_promos);
+            moves.push_back({to - dir, to, promo_q});
+            moves.push_back({to - dir, to, promo_r});
+            moves.push_back({to - dir, to, promo_b});
+            moves.push_back({to - dir, to, promo_n});
+        }
+
+        // Captures (including capture-promotions)
+        Bitboard copy_pawns = pawns;
+        while (copy_pawns) {
+            int from = pop_lsb(copy_pawns);
+            Bitboard attacks = PAWN_ATTACKS[color_idx][from] & enemies;
+            while (attacks) {
+                int to = pop_lsb(attacks);
+                if (sq_row(to) == promo_rank) {
+                    moves.push_back({from, to, promo_q});
+                    moves.push_back({from, to, promo_r});
+                    moves.push_back({from, to, promo_b});
+                    moves.push_back({from, to, promo_n});
+                } else {
+                    moves.push_back({from, to});
+                }
+            }
+            // En passant
+            if (en_passant_sq_ >= 0 && sq_row(from) == ep_capture_rank) {
+                if (test_bit(PAWN_ATTACKS[color_idx][from], en_passant_sq_)) {
+                    moves.push_back({from, en_passant_sq_});
+                }
+            }
+        }
+    }
+
+    // Knight captures
+    {
+        Piece knight = white ? Piece::WhiteKnight : Piece::BlackKnight;
+        Bitboard knights = bb(knight);
+        while (knights) {
+            int from = pop_lsb(knights);
+            Bitboard targets = KNIGHT_ATTACKS[from] & enemies;
+            while (targets) {
+                moves.push_back({from, pop_lsb(targets)});
+            }
+        }
+    }
+
+    // Bishop captures
+    {
+        Piece bishop = white ? Piece::WhiteBishop : Piece::BlackBishop;
+        Bitboard bishops = bb(bishop);
+        while (bishops) {
+            int from = pop_lsb(bishops);
+            Bitboard targets = bishop_attacks(from, occ) & enemies;
+            while (targets) {
+                moves.push_back({from, pop_lsb(targets)});
+            }
+        }
+    }
+
+    // Rook captures
+    {
+        Piece rook = white ? Piece::WhiteRook : Piece::BlackRook;
+        Bitboard rooks = bb(rook);
+        while (rooks) {
+            int from = pop_lsb(rooks);
+            Bitboard targets = rook_attacks(from, occ) & enemies;
+            while (targets) {
+                moves.push_back({from, pop_lsb(targets)});
+            }
+        }
+    }
+
+    // Queen captures
+    {
+        Piece queen = white ? Piece::WhiteQueen : Piece::BlackQueen;
+        Bitboard queens = bb(queen);
+        while (queens) {
+            int from = pop_lsb(queens);
+            Bitboard targets = queen_attacks(from, occ) & enemies;
+            while (targets) {
+                moves.push_back({from, pop_lsb(targets)});
+            }
+        }
+    }
+
+    // King captures (no castling)
+    {
+        int ksq = king_square();
+        Bitboard targets = KING_ATTACKS[ksq] & enemies;
+        while (targets) {
+            moves.push_back({ksq, pop_lsb(targets)});
+        }
+    }
+}
+
+std::vector<Move> Board::generate_tactical_moves() const {
+    std::vector<Move> pseudo;
+    generate_pseudo_tactical_moves(pseudo);
+
+    Color enemy = (side_to_move_ == Color::White) ? Color::Black : Color::White;
+    Piece our_king = (side_to_move_ == Color::White) ? Piece::WhiteKing : Piece::BlackKing;
+
+    std::vector<Move> legal;
+    for (const auto& m : pseudo) {
+        Board copy = *this;
+
+        Piece moved = copy.piece_at_sq(m.from_sq);
+
+        // En passant: remove the captured pawn
+        bool is_ep = (moved == Piece::WhitePawn || moved == Piece::BlackPawn) &&
+                     m.to_sq == en_passant_sq_ && en_passant_sq_ >= 0;
+        if (is_ep) {
+            int cap_sq = m.to_sq + ((side_to_move_ == Color::White) ? -8 : 8);
+            copy.remove_piece_sq(cap_sq);
+        }
+
+        // Move the piece
+        copy.remove_piece_sq(m.from_sq);
+        if (m.to_sq >= 0) copy.remove_piece_sq(m.to_sq);
+        Piece placed = (m.promotion != Piece::None) ? m.promotion : moved;
+        set_bit(copy.bb(placed), m.to_sq);
+
+        // Check if king is safe
+        int ksq = __builtin_ctzll(copy.bb(our_king));
+        if (!copy.is_attacked(ksq, enemy)) {
+            legal.push_back(m);
+        }
+    }
+    return legal;
+}
+
 // --- Make move ---
 
 void Board::make_move(const Move& m) {
     Piece moved = piece_at_sq(m.from_sq);
     Piece captured = piece_at_sq(m.to_sq);
 
+    // Save old castling/EP for hash updates
+    uint8_t old_castling = castling_;
+    int old_ep = en_passant_sq_;
+
+    // XOR out old castling and EP from hash
+    hash_ ^= castling_keys[castling_];
+    if (en_passant_sq_ >= 0) hash_ ^= en_passant_keys[en_passant_sq_ % 8];
+
     // En passant capture
     bool is_ep = (moved == Piece::WhitePawn || moved == Piece::BlackPawn) &&
                  m.to_sq == en_passant_sq_ && en_passant_sq_ >= 0;
     if (is_ep) {
         int cap_sq = m.to_sq + ((side_to_move_ == Color::White) ? -8 : 8);
+        Piece ep_pawn = piece_at_sq(cap_sq);
         remove_piece_sq(cap_sq);
+        hash_ ^= piece_keys[static_cast<int>(ep_pawn) - 1][cap_sq];
+    }
+
+    // Hash: remove moved piece from source
+    hash_ ^= piece_keys[static_cast<int>(moved) - 1][m.from_sq];
+
+    // Hash: remove captured piece from destination (if any)
+    if (captured != Piece::None) {
+        hash_ ^= piece_keys[static_cast<int>(captured) - 1][m.to_sq];
     }
 
     // Remove piece from source, place at destination
@@ -494,17 +668,29 @@ void Board::make_move(const Move& m) {
     Piece placed = (m.promotion != Piece::None) ? m.promotion : moved;
     set_bit(bb(placed), m.to_sq);
 
+    // Hash: add placed piece at destination
+    hash_ ^= piece_keys[static_cast<int>(placed) - 1][m.to_sq];
+
     // Castling rook movement
     if ((moved == Piece::WhiteKing || moved == Piece::BlackKing) &&
         std::abs(sq_col(m.to_sq) - sq_col(m.from_sq)) == 2) {
         int row = sq_row(m.from_sq);
         Piece rook = (side_to_move_ == Color::White) ? Piece::WhiteRook : Piece::BlackRook;
+        int rook_idx = static_cast<int>(rook) - 1;
         if (sq_col(m.to_sq) == 6) {
-            clear_bit(bb(rook), sq(row, 7));
-            set_bit(bb(rook), sq(row, 5));
+            int rook_from = sq(row, 7);
+            int rook_to = sq(row, 5);
+            clear_bit(bb(rook), rook_from);
+            set_bit(bb(rook), rook_to);
+            hash_ ^= piece_keys[rook_idx][rook_from];
+            hash_ ^= piece_keys[rook_idx][rook_to];
         } else {
-            clear_bit(bb(rook), sq(row, 0));
-            set_bit(bb(rook), sq(row, 3));
+            int rook_from = sq(row, 0);
+            int rook_to = sq(row, 3);
+            clear_bit(bb(rook), rook_from);
+            set_bit(bb(rook), rook_to);
+            hash_ ^= piece_keys[rook_idx][rook_from];
+            hash_ ^= piece_keys[rook_idx][rook_to];
         }
     }
 
@@ -529,6 +715,10 @@ void Board::make_move(const Move& m) {
         en_passant_sq_ = -1;
     }
 
+    // XOR in new castling and EP
+    hash_ ^= castling_keys[castling_];
+    if (en_passant_sq_ >= 0) hash_ ^= en_passant_keys[en_passant_sq_ % 8];
+
     // Halfmove clock
     if (moved == Piece::WhitePawn || moved == Piece::BlackPawn || captured != Piece::None || is_ep)
         halfmove_clock_ = 0;
@@ -540,6 +730,32 @@ void Board::make_move(const Move& m) {
 
     // Switch side
     side_to_move_ = (side_to_move_ == Color::White) ? Color::Black : Color::White;
+    hash_ ^= side_key;
+}
+
+void Board::make_null_move() {
+    // XOR out old EP
+    if (en_passant_sq_ >= 0) {
+        hash_ ^= en_passant_keys[en_passant_sq_ % 8];
+    }
+    en_passant_sq_ = -1;
+
+    // Flip side
+    side_to_move_ = (side_to_move_ == Color::White) ? Color::Black : Color::White;
+    hash_ ^= side_key;
+
+    halfmove_clock_++;
+    if (side_to_move_ == Color::White) fullmove_number_++;
+}
+
+bool Board::has_non_pawn_material() const {
+    if (side_to_move_ == Color::White) {
+        return (bb(Piece::WhiteKnight) | bb(Piece::WhiteBishop) |
+                bb(Piece::WhiteRook) | bb(Piece::WhiteQueen)) != 0;
+    } else {
+        return (bb(Piece::BlackKnight) | bb(Piece::BlackBishop) |
+                bb(Piece::BlackRook) | bb(Piece::BlackQueen)) != 0;
+    }
 }
 
 }  // namespace duchess

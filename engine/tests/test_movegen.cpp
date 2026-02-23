@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include "board.hpp"
+#include "perft.h"
 
 using namespace duchess;
 
@@ -324,4 +325,125 @@ TEST_CASE("Move from UCI string", "[movegen][uci]") {
     REQUIRE(sq_row(promo.from_sq) == 6);
     REQUIRE(sq_row(promo.to_sq) == 7);
     REQUIRE(promo.promotion == Piece::WhiteQueen);
+}
+
+// ===== PERFT TESTS =====
+
+TEST_CASE("Perft initial position depth 1", "[perft]") {
+    Board board;
+    REQUIRE(perft(board, 1) == 20);
+}
+
+TEST_CASE("Perft initial position depth 2", "[perft]") {
+    Board board;
+    REQUIRE(perft(board, 2) == 400);
+}
+
+TEST_CASE("Perft initial position depth 3", "[perft]") {
+    Board board;
+    REQUIRE(perft(board, 3) == 8902);
+}
+
+TEST_CASE("Perft initial position depth 4", "[perft]") {
+    Board board;
+    REQUIRE(perft(board, 4) == 197281);
+}
+
+TEST_CASE("Perft initial position depth 5", "[perft]") {
+    Board board;
+    REQUIRE(perft(board, 5) == 4865609);
+}
+
+TEST_CASE("Perft Kiwipete depth 1", "[perft]") {
+    Board board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+    REQUIRE(perft(board, 1) == 48);
+}
+
+TEST_CASE("Perft Kiwipete depth 2", "[perft]") {
+    Board board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+    REQUIRE(perft(board, 2) == 2039);
+}
+
+TEST_CASE("Perft Kiwipete depth 3", "[perft]") {
+    Board board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+    REQUIRE(perft(board, 3) == 97862);
+}
+
+TEST_CASE("Perft Kiwipete depth 4", "[perft]") {
+    Board board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+    REQUIRE(perft(board, 4) == 4085603);
+}
+
+TEST_CASE("Perft Position 5 depth 1", "[perft]") {
+    Board board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+    REQUIRE(perft(board, 1) == 44);
+}
+
+TEST_CASE("Perft Position 5 depth 2", "[perft]") {
+    Board board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+    REQUIRE(perft(board, 2) == 1486);
+}
+
+TEST_CASE("Perft Position 5 depth 3", "[perft]") {
+    Board board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+    REQUIRE(perft(board, 3) == 62379);
+}
+
+TEST_CASE("Perft Position 5 depth 4", "[perft]") {
+    Board board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
+    REQUIRE(perft(board, 4) == 2103487);
+}
+
+// ===== TACTICAL MOVE GENERATION =====
+
+TEST_CASE("generate_tactical_moves matches filtered legal moves for Kiwipete", "[movegen]") {
+    Board board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+
+    // Get all legal moves and filter to captures + promotions
+    auto all_moves = board.generate_legal_moves();
+    std::vector<Move> expected;
+    for (const auto& m : all_moves) {
+        if (board.piece_at_sq(m.to_sq) != Piece::None || m.promotion != Piece::None) {
+            expected.push_back(m);
+        }
+    }
+
+    // Get tactical moves
+    auto tactical = board.generate_tactical_moves();
+
+    // Sort both lists by encoded move for comparison
+    auto encode_sort = [](const Move& a, const Move& b) {
+        return a.encode() < b.encode();
+    };
+    std::sort(expected.begin(), expected.end(), encode_sort);
+    std::sort(tactical.begin(), tactical.end(), encode_sort);
+
+    REQUIRE(tactical.size() == expected.size());
+    for (size_t i = 0; i < tactical.size(); ++i) {
+        REQUIRE(tactical[i].encode() == expected[i].encode());
+    }
+}
+
+TEST_CASE("generate_tactical_moves includes en passant", "[movegen]") {
+    Board board("rnbqkbnr/pppp1ppp/8/4pP2/8/8/PPPPP1PP/RNBQKBNR w KQkq e6 0 3");
+    auto tactical = board.generate_tactical_moves();
+
+    bool has_ep = std::any_of(tactical.begin(), tactical.end(), [](const Move& m) {
+        return m.from_sq == sq(4, 5) && m.to_sq == sq(5, 4);  // f5xe6 EP
+    });
+    REQUIRE(has_ep);
+}
+
+TEST_CASE("generate_tactical_moves includes promotions from pushes", "[movegen]") {
+    Board board("8/P7/8/8/8/8/8/4K2k w - - 0 1");
+    auto tactical = board.generate_tactical_moves();
+
+    // Should have 4 promotions (Q, R, B, N) from a7a8
+    int promo_count = 0;
+    for (const auto& m : tactical) {
+        if (m.from_sq == sq(6, 0) && m.to_sq == sq(7, 0) && m.promotion != Piece::None) {
+            promo_count++;
+        }
+    }
+    REQUIRE(promo_count == 4);
 }

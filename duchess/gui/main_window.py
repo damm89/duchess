@@ -7,10 +7,13 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QTextEdit, QMessageBox, QStatusBar, QLabel, QComboBox,
+    QGroupBox, QGridLayout, QFileDialog,
 )
 
 from duchess.board import DuchessBoard
+from duchess.engine_wrapper import UCIEngine, get_engine
 from duchess.gui.board_widget import ChessBoardWidget
+from duchess.gui.eval_bar import EvaluationBar
 from duchess.gui.worker import EngineWorker
 
 
@@ -38,15 +41,18 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Duchess Chess")
-        self.resize(800, 600)
+        self.resize(900, 650)
         if ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(ICON_PATH)))
 
         self._player_color = "white"
         self._move_number = 1
-        self._worker = None
+        self._workers = {}          # engine_name -> EngineWorker
+        self._engines = []          # list of UCIEngine instances
+        self._analysis_rows = {}    # engine_name -> {depth, score, pv} QLabels
 
         # --- Widgets ---
+        self._eval_bar = EvaluationBar()
         self._board_widget = ChessBoardWidget()
         self._board_widget.move_made.connect(self._on_player_move)
 
@@ -77,15 +83,30 @@ class MainWindow(QMainWindow):
         self._log.setMinimumWidth(200)
         controls.addWidget(QLabel("Moves:"))
         controls.addWidget(self._log)
+
+        # Analysis panel
+        self._analysis_box = QGroupBox("Analysis")
+        self._analysis_layout = QGridLayout()
+        self._analysis_layout.setColumnStretch(2, 1)  # PV column stretches
+        self._analysis_box.setLayout(self._analysis_layout)
+        controls.addWidget(self._analysis_box)
+
+        # Load external engine button
+        btn_load = QPushButton("Load External Engine...")
+        btn_load.clicked.connect(self._load_external_engine)
+        controls.addWidget(btn_load)
+
         controls.addStretch()
 
-        # Layout
+        # Layout: eval bar | board | controls
         main_layout = QHBoxLayout()
-        main_layout.addWidget(self._board_widget, stretch=3)
+        main_layout.addWidget(self._eval_bar)
+        main_layout.addWidget(self._board_widget, stretch=1)
 
         right_panel = QWidget()
         right_panel.setLayout(controls)
-        main_layout.addWidget(right_panel, stretch=1)
+        right_panel.setFixedWidth(300)
+        main_layout.addWidget(right_panel)
 
         central = QWidget()
         central.setLayout(main_layout)
@@ -96,9 +117,52 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self._status)
         self._status.showMessage("Welcome to Duchess! Start a new game.")
 
+        # Add Duchess row to analysis panel
+        self._duchess_name = "Duchess"
+        try:
+            self._duchess_name = get_engine().name
+        except Exception:
+            pass
+        self._add_analysis_row(self._duchess_name)
+
     def _selected_time_ms(self):
         idx = self._time_combo.currentIndex()
         return TIME_OPTIONS[idx][1]
+
+    # --- External engine loading ---
+
+    def _load_external_engine(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select UCI Engine Executable", "", "All Files (*)"
+        )
+        if not path:
+            return
+        try:
+            engine = UCIEngine(engine_path=path)
+        except Exception as e:
+            QMessageBox.warning(self, "Engine Error", f"Failed to load engine:\n{e}")
+            return
+        self._engines.append(engine)
+        self._add_analysis_row(engine.name)
+        self._status.showMessage(f"Loaded engine: {engine.name}")
+
+    def _add_analysis_row(self, name):
+        row = self._analysis_layout.rowCount()
+        name_label = QLabel(name)
+        name_label.setStyleSheet("font-weight: bold;")
+        depth_label = QLabel("--")
+        score_label = QLabel("--")
+        pv_label = QLabel("")
+        pv_label.setWordWrap(True)
+        self._analysis_layout.addWidget(name_label, row, 0)
+        self._analysis_layout.addWidget(depth_label, row, 1)
+        self._analysis_layout.addWidget(score_label, row, 2)
+        self._analysis_layout.addWidget(pv_label, row, 3)
+        self._analysis_rows[name] = {
+            "depth": depth_label,
+            "score": score_label,
+            "pv": pv_label,
+        }
 
     # --- Game management ---
 
@@ -108,6 +172,12 @@ class MainWindow(QMainWindow):
         self._board_widget.set_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         self._board_widget.setEnabled(True)
         self._log.clear()
+        self._eval_bar.set_score(cp=0)
+        # Reset analysis rows
+        for row in self._analysis_rows.values():
+            row["depth"].setText("--")
+            row["score"].setText("--")
+            row["pv"].setText("")
 
         if color == "white":
             self._status.showMessage("Your move (White).")
@@ -147,16 +217,76 @@ class MainWindow(QMainWindow):
 
     def _start_engine(self):
         fen = self._board_widget.board.fen()
-        self._worker = EngineWorker(fen, time_ms=self._selected_time_ms())
-        self._worker.move_found.connect(self._on_engine_move)
-        self._worker.start()
+        time_ms = self._selected_time_ms()
 
-    def _on_engine_move(self, uci):
+        # Duchess (default engine, no explicit instance — uses singleton)
+        duchess_worker = EngineWorker(fen, time_ms=time_ms)
+        duchess_worker.move_found.connect(self._on_engine_move)
+        duchess_worker.search_info.connect(self._on_search_info)
+        self._workers["__duchess__"] = duchess_worker
+        duchess_worker.start()
+
+        # External engines (ambient analysis only)
+        for engine in self._engines:
+            worker = EngineWorker(fen, time_ms=time_ms, engine=engine)
+            worker.move_found.connect(self._on_engine_move)
+            worker.search_info.connect(self._on_search_info)
+            self._workers[engine.name] = worker
+            worker.start()
+
+    def _on_search_info(self, name, info):
+        """Handle real-time search info from any engine."""
+        # Determine if this is the Duchess engine
+        is_duchess = name == "__duchess__" or "duchess" in name.lower()
+
+        # Update eval bar and PV arrows only for Duchess
+        if is_duchess:
+            fen = self._board_widget.board.fen()
+            side_to_move = fen.split()[1] if len(fen.split()) >= 2 else "w"
+
+            if "score_mate" in info:
+                mate = info["score_mate"]
+                if side_to_move == "b":
+                    mate = -mate
+                self._eval_bar.set_score(mate=mate, depth=info.get("depth", 0))
+            elif "score_cp" in info:
+                cp = info["score_cp"]
+                if side_to_move == "b":
+                    cp = -cp
+                self._eval_bar.set_score(cp=cp, depth=info.get("depth", 0))
+
+            pv = info.get("pv", [])
+            if pv:
+                self._board_widget.draw_pv_arrows(pv[:4])
+
+            depth = info.get("depth", "?")
+            nodes = info.get("nodes", 0)
+            nps = info.get("nps", 0)
+            self._status.showMessage(f"Thinking... depth {depth}  nodes {nodes}  nps {nps}")
+
+        # Update analysis panel row
+        if name in self._analysis_rows:
+            row = self._analysis_rows[name]
+            row["depth"].setText(f"d{info.get('depth', '?')}")
+            if "score_mate" in info:
+                row["score"].setText(f"M{info['score_mate']}")
+            elif "score_cp" in info:
+                row["score"].setText(f"{info['score_cp'] / 100:+.2f}")
+            pv = info.get("pv", [])
+            if pv:
+                row["pv"].setText(" ".join(pv[:6]))
+
+    def _on_engine_move(self, uci, name):
+        # Only push moves from Duchess — external engines are ambient analysis
+        is_duchess = name == "__duchess__" or "duchess" in name.lower()
+        if not is_duchess:
+            return
+
         board = self._board_widget.board
 
         # Get SAN before pushing
-        from duchess_engine import Move as _CppMove
-        move = _CppMove.from_uci(uci)
+        from duchess.chess_types import Move
+        move = Move.from_uci(uci)
         san = board.san(move)
 
         # Push the move and update display
@@ -164,7 +294,8 @@ class MainWindow(QMainWindow):
         self._board_widget._last_move_from = move.from_sq
         self._board_widget._last_move_to = move.to_sq
         self._board_widget._selected_sq = None
-        self._board_widget.update()
+        self._board_widget.clear_arrows()
+        self._board_widget._sync_pieces()
 
         # Log the engine's move
         if self._player_color == "white":
@@ -182,7 +313,7 @@ class MainWindow(QMainWindow):
         self._board_widget.setEnabled(True)
         turn = "White" if board.turn == "white" else "Black"
         self._status.showMessage(f"Your move ({turn}).")
-        self._worker = None
+        self._workers.clear()
 
     # --- Game over ---
 

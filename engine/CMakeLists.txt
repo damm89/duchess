@@ -11,8 +11,16 @@ add_library(duchess_engine_lib
     src/board.cpp
     src/eval.cpp
     src/search.cpp
+    src/perft.cpp
+    src/zobrist.cpp
+    src/tt.cpp
+    src/polyglot.cpp
 )
 target_include_directories(duchess_engine_lib PUBLIC include)
+
+# --- UCI standalone executable ---
+add_executable(duchess_cli src/main.cpp src/uci.cpp)
+target_link_libraries(duchess_cli PRIVATE duchess_engine_lib)
 
 # --- pybind11 Python module ---
 find_package(pybind11 REQUIRED)
@@ -35,6 +43,8 @@ add_executable(duchess_tests
     tests/test_eval.cpp
     tests/test_movegen.cpp
     tests/test_search.cpp
+    tests/test_tt.cpp
+    tests/test_polyglot.cpp
 )
 target_link_libraries(duchess_tests PRIVATE duchess_engine_lib Catch2::Catch2WithMain)
 

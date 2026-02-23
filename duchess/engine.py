@@ -1,33 +1,34 @@
-"""ChessEngine — wraps the C++ duchess_engine search."""
-import duchess_engine
-from duchess_engine import Board as _CppBoard
+"""ChessEngine — wraps the UCI engine subprocess for search."""
+from duchess.engine_wrapper import get_engine
 
 
 class ChessEngine:
     def __init__(self):
-        pass  # No external process needed
+        pass
 
     def get_best_move(self, fen, depth=5):
-        board = _CppBoard(fen)
-        result = duchess_engine.search(board, depth)
-        return result.best_move.to_uci()
+        engine = get_engine()
+        engine.set_position_fen(fen)
+        return engine.go_depth(depth)
 
-    def get_best_move_timed(self, fen, time_ms=1000):
-        board = _CppBoard(fen)
-        result = duchess_engine.search_timed(board, time_ms)
-        return result.best_move.to_uci()
+    def get_best_move_timed(self, fen, time_ms=1000, info_cb=None):
+        engine = get_engine()
+        engine.set_position_fen(fen)
+        return engine.go_movetime(time_ms, info_cb=info_cb)
 
     def evaluate_position(self, fen):
-        board = _CppBoard(fen)
-        # Check for mate/stalemate first
-        if duchess_engine.is_checkmate(board):
-            # Side to move is mated
-            return {"mate": 0, "depth": 0}
-        score = duchess_engine.evaluate(board)
-        # Convert to white's perspective
-        if board.side_to_move() == duchess_engine.Color.BLACK:
-            score = -score
-        return {"cp": score, "depth": 0}
+        engine = get_engine()
+        engine.set_position_fen(fen)
+        result = engine.evaluate()
+        if "mate" in result:
+            return {"mate": result["mate"], "depth": 0}
+        # eval returns score from side-to-move perspective;
+        # convert to white's perspective
+        cp = result["cp"]
+        parts = fen.split()
+        if len(parts) >= 2 and parts[1] == "b":
+            cp = -cp
+        return {"cp": cp, "depth": 0}
 
     def close(self):
         pass

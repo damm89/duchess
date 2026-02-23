@@ -9,6 +9,13 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+.pytest_cache/
+
+# Logs
+crash.log
+
+# Claude / agent
+.claude/
 
 # Environment & secrets
 .env
@@ -23,6 +30,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Agent instructions (not part of the app)
-agent_instructions/
+# Misc
 compacted.txt

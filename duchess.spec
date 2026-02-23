@@ -14,10 +14,15 @@ if not engine_so:
 if not engine_so:
     raise FileNotFoundError("duchess_engine shared library not found in engine/build/")
 
+# Find the duchess_cli executable
+engine_cli = ENGINE_BUILD / "duchess_cli"
+if not engine_cli.exists():
+    raise FileNotFoundError("duchess_cli executable not found in engine/build/")
+
 a = Analysis(
     [str(PROJECT_ROOT / "duchess" / "main.py")],
     pathex=[str(PROJECT_ROOT)],
-    binaries=[(str(engine_so[0]), ".")],
+    binaries=[(str(engine_so[0]), "."), (str(engine_cli), ".")],
     datas=[(str(ASSETS_DIR), "assets")],
     hiddenimports=["duchess_engine", "duchess.gui", "duchess.gui.board_widget",
                    "duchess.gui.main_window", "duchess.gui.worker"],

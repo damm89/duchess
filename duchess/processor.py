@@ -1,4 +1,4 @@
-from duchess_engine import Move as _CppMove
+from duchess.chess_types import Move as _Move
 
 from duchess.board import DuchessBoard, InvalidMoveError, IllegalMoveError, AmbiguousMoveError
 from duchess.engine import ChessEngine
@@ -101,7 +101,7 @@ def _handle_start(user, color, db_session):
     if color == "black":
         engine = get_engine()
         engine_uci = engine.get_best_move(board.fen())
-        engine_move = _CppMove.from_uci(engine_uci)
+        engine_move = _Move.from_uci(engine_uci)
         engine_san = board.san(engine_move)
         board.push(engine_move)
 
@@ -170,7 +170,7 @@ def _process(sender_email, move_str, db_session):
     # Try UCI first
     player_move = None
     try:
-        candidate = _CppMove.from_uci(move_str)
+        candidate = _Move.from_uci(move_str)
         legal = board.legal_moves
         for lm in legal:
             if lm.from_sq == candidate.from_sq and lm.to_sq == candidate.to_sq and lm.promotion == candidate.promotion:
@@ -208,7 +208,7 @@ def _process(sender_email, move_str, db_session):
 
     engine = get_engine()
     engine_uci = engine.get_best_move(board.fen())
-    engine_move = _CppMove.from_uci(engine_uci)
+    engine_move = _Move.from_uci(engine_uci)
     engine_san = board.san(engine_move)
     board.push(engine_move)
 
