@@ -47,6 +47,8 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | **3.1** Null Move Pruning | Skips branches where opponent's free move still loses; depth-adaptive R |
 | **3.2** LMR & PVS | Late move reductions for quiet moves; principal variation search with null/full window re-search |
 | **3.3** Lazy SMP | Multi-threaded search with shared transposition table; helper threads at staggered depths |
+| **4.1** Syzygy Tablebases | Perfect endgame evaluation with up to 5 pieces via Fathom |
+| **4.2** NNUE Evaluation | Custom PyTorch pipeline yielding a SIMD-accelerated C++ network ([Guide](nnue/README.md)) |
 | **5.1** Board Rendering | QGraphicsView/QGraphicsScene with SVG pieces and smooth drag-and-drop |
 | **5.2** Analytical Visualizations | Live evaluation bar (centipawn/mate), principal-variation arrows, threat heatmaps |
 | **5.3** Multi-Engine Analysis | Load external UCI engines for side-by-side comparison in analysis panel |
@@ -55,8 +57,6 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 
 ### 🔧 Next up
 
-- Syzygy tablebase integration (Phase 4.1)
-- NNUE evaluation (Phase 4.2 / 4.3)
 - Cloud sync API (Phase 6.3)
 
 ---
