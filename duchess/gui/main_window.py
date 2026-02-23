@@ -122,6 +122,37 @@ class MainWindow(QMainWindow):
         export_pgn.triggered.connect(self._export_pgn)
         game_menu.addAction(export_pgn)
 
+        # Advanced Menu
+        advanced_menu = menubar.addMenu("&Advanced")
+
+        load_engine = QAction("Load External Engine...", self)
+        load_engine.triggered.connect(self._load_external_engine)
+        advanced_menu.addAction(load_engine)
+
+        toggle_heatmap = QAction("Toggle Threat Heatmap", self)
+        toggle_heatmap.triggered.connect(self._control_panel.heatmap_button.click)
+        advanced_menu.addAction(toggle_heatmap)
+
+        advanced_menu.addSeparator()
+
+        load_book = QAction("Load Opening Book...", self)
+        load_book.triggered.connect(self._load_custom_book)
+        advanced_menu.addAction(load_book)
+
+        reset_book = QAction("Reset Book to Default", self)
+        reset_book.triggered.connect(self._reset_default_book)
+        advanced_menu.addAction(reset_book)
+
+        colossal_db = QAction("Colossal Database Explorer...", self)
+        colossal_db.triggered.connect(self._open_db_explorer)
+        advanced_menu.addAction(colossal_db)
+
+        advanced_menu.addSeparator()
+
+        syzygy_tb = QAction("Select Syzygy Tablebases...", self)
+        syzygy_tb.triggered.connect(self._control_panel._select_syzygy_files)
+        advanced_menu.addAction(syzygy_tb)
+
     def _import_fen(self):
         fen, ok = QInputDialog.getText(self, "Import FEN", "Paste FEN string:")
         if ok and fen:

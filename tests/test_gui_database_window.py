@@ -52,7 +52,7 @@ def test_import_worker_success(qtbot):
                     dialog._import_worker.wait()
 
                 # Verify logic
-                mock_parse.assert_called_once_with("fake.pgn")
+                mock_parse.assert_called_once_with("fake.pgn", training_use=False)
 
 
 def test_import_worker_failure(qtbot):
