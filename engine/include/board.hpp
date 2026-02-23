@@ -60,6 +60,7 @@ public:
     Color side_to_move() const { return side_to_move_; }
     uint8_t castling_rights() const { return castling_; }
     int en_passant_square() const { return en_passant_sq_; }
+    int halfmove_clock() const { return halfmove_clock_; }
     uint64_t hash() const { return hash_; }
     std::string to_fen() const;
 
@@ -80,6 +81,8 @@ public:
     Bitboard white_pieces() const;
     Bitboard black_pieces() const;
     Bitboard occupied() const;
+
+    Bitboard bitboard_of(Piece p) const { return pieces_[static_cast<int>(p) - 1]; }
 
 private:
     // 12 piece bitboards

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(duchess_engine LANGUAGES CXX)
+project(duchess_engine LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,8 +15,9 @@ add_library(duchess_engine_lib
     src/zobrist.cpp
     src/tt.cpp
     src/polyglot.cpp
+    fathom/src/tbprobe.c
 )
-target_include_directories(duchess_engine_lib PUBLIC include)
+target_include_directories(duchess_engine_lib PUBLIC include fathom/src)
 
 # --- UCI standalone executable ---
 add_executable(duchess_cli src/main.cpp src/uci.cpp)
@@ -45,6 +46,7 @@ add_executable(duchess_tests
     tests/test_search.cpp
     tests/test_tt.cpp
     tests/test_polyglot.cpp
+    tests/test_syzygy.cpp
 )
 target_link_libraries(duchess_tests PRIVATE duchess_engine_lib Catch2::Catch2WithMain)
 

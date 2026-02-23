@@ -5,6 +5,7 @@
 #include "perft.h"
 #include "tt.h"
 #include "polyglot.h"
+#include "tbprobe.h"
 #include <atomic>
 #include <iostream>
 #include <sstream>
@@ -210,6 +211,7 @@ void uci_loop() {
             std::cout << "option name Threads type spin default 1 min 1 max 128" << std::endl;
             std::cout << "option name OwnBook type check default false" << std::endl;
             std::cout << "option name BookFile type string default <empty>" << std::endl;
+            std::cout << "option name SyzygyPath type string default <empty>" << std::endl;
             std::cout << "uciok" << std::endl;
         } else if (cmd == "isready") {
             // Wait for search to finish before responding
@@ -233,6 +235,13 @@ void uci_loop() {
                     if (book.load(tokens[4])) {
                         own_book = true;
                     }
+                } else if (tokens[2] == "SyzygyPath") {
+                    std::string path = "";
+                    for (size_t i = 4; i < tokens.size(); ++i) {
+                        if (i > 4) path += " ";
+                        path += tokens[i];
+                    }
+                    tb_init(path.c_str());
                 }
             }
         } else if (cmd == "ucinewgame") {
@@ -311,6 +320,7 @@ void uci_loop() {
                 if (t.joinable()) t.join();
             }
             search_threads.clear();
+            tb_free();
             break;
         }
     }

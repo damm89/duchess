@@ -1,6 +1,7 @@
 #include "search.hpp"
 #include "eval.hpp"
 #include "tt.h"
+#include "tbprobe.h"
 #include <algorithm>
 #include <chrono>
 
@@ -131,6 +132,33 @@ static int alpha_beta(Board& board, int depth, int alpha, int beta, int ply,
             if (tt_entry.flag == TT_EXACT) return tt_entry.score;
             if (tt_entry.flag == TT_LOWER_BOUND && tt_entry.score >= beta) return tt_entry.score;
             if (tt_entry.flag == TT_UPPER_BOUND && tt_entry.score <= alpha) return tt_entry.score;
+        }
+    }
+
+    // Syzygy probe
+    if (TB_LARGEST > 0 && popcount(board.occupied()) <= TB_LARGEST && !state.aborted) {
+        unsigned fathom_ep = board.en_passant_square() == -1 ? 0 : board.en_passant_square();
+        unsigned wdl = tb_probe_wdl(
+            board.white_pieces(), board.black_pieces(),
+            board.bitboard_of(Piece::WhiteKing) | board.bitboard_of(Piece::BlackKing),
+            board.bitboard_of(Piece::WhiteQueen) | board.bitboard_of(Piece::BlackQueen),
+            board.bitboard_of(Piece::WhiteRook) | board.bitboard_of(Piece::BlackRook),
+            board.bitboard_of(Piece::WhiteBishop) | board.bitboard_of(Piece::BlackBishop),
+            board.bitboard_of(Piece::WhiteKnight) | board.bitboard_of(Piece::BlackKnight),
+            board.bitboard_of(Piece::WhitePawn) | board.bitboard_of(Piece::BlackPawn),
+            board.halfmove_clock(), board.castling_rights(), fathom_ep,
+            board.side_to_move() == Color::White
+        );
+
+        if (wdl != TB_RESULT_FAILED) {
+            int tb_score = 0;
+            if (wdl == TB_WIN) tb_score = MATE_SCORE - MAX_PLY - ply;
+            else if (wdl == TB_LOSS) tb_score = -MATE_SCORE + MAX_PLY + ply;
+            else tb_score = 0; // DRAW or CURSED_WIN or BLESSED_LOSS
+
+            // Exact bound 
+            tt.store(hash, tb_score, depth, TT_EXACT, 0);
+            return tb_score;
         }
     }
 
