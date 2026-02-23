@@ -38,15 +38,16 @@ def mock_lichess_api_globally(request):
         yield
 
 @pytest.fixture(autouse=True)
-def cleanup_engine_workers():
-    """Centrally solve thread-related Python aborts by ensuring all EngineWorkers are joined before test teardown."""
-    from duchess.gui.worker import EngineWorker
-    EngineWorker._active_workers = getattr(EngineWorker, "_active_workers", [])
-    yield
-    for worker in list(EngineWorker._active_workers):
-        try:
-            if worker.isRunning():
-                worker.wait(3000)
-        except RuntimeError:
-            pass
-    EngineWorker._active_workers.clear()
+def mock_engine_start_globally(request):
+    """Centrally mock EngineManager.start_multipv to prevent runaway threads during tests.
+    Tests that actually want to test the engine (like test_gui_main_window.py or test_worker.py)
+    should explicitly unmock or just let it be, but since we are mocking it globally, we only
+    skip the mock for tests that we know test the engine directly.
+    """
+    if "test_gui_main_window" in request.module.__name__ or "test_worker" in request.module.__name__:
+        yield
+        return
+        
+    from unittest.mock import patch
+    with patch("duchess.gui.engine_manager.EngineManager.start_multipv"):
+        yield

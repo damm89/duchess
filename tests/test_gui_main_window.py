@@ -22,7 +22,7 @@ def test_new_game_white(qtbot):
     assert window._player_color == "white"
     assert window._board_widget.isEnabled() is True
     assert window._status.currentMessage() == "Your move (White)."
-    assert len(window._workers) == 0
+    assert len(window._engine_manager._workers) == 0
 
 def test_engine_worker_signal(qtbot):
     """Test that EngineWorker can parse FEN and return a move via signal."""
@@ -52,10 +52,10 @@ def test_new_game_black(qtbot):
             assert window._player_color == "black"
             assert window._status.currentMessage() == "Engine is thinking..."
             assert window._board_widget.isEnabled() is False
-            assert len(window._workers) > 0
+            assert len(window._engine_manager._workers) > 0
 
             # Wait for the Duchess worker to emit move_found
-            duchess_worker = window._workers.get("__duchess__")
+            duchess_worker = window._engine_manager._workers.get("__duchess__")
             assert duchess_worker is not None
             qtbot.waitSignal(duchess_worker.move_found, timeout=3000)
             duchess_worker.wait()
@@ -63,5 +63,5 @@ def test_new_game_black(qtbot):
     # After engine moves
     assert window._board_widget.isEnabled() is True
     assert "Your move" in window._status.currentMessage()
-    assert len(window._workers) == 0
+    assert len(window._engine_manager._workers) == 0
     assert window._board_widget.board.turn == "black" # It's now black's turn

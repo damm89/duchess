@@ -17,7 +17,7 @@ from duchess.gui.board_widget import ChessBoardWidget
 from duchess.gui.eval_bar import EvaluationBar
 from duchess.gui.control_panel import ControlPanelWidget
 from duchess.gui.database_window import DatabaseExplorerDialog
-from duchess.gui.worker import EngineWorker
+from duchess.gui.engine_manager import EngineManager
 
 
 def _resource_path(relative: str) -> Path:
@@ -43,8 +43,9 @@ class MainWindow(QMainWindow):
 
         self._player_color = "white"
         self._move_number = 1
-        self._workers = {}          # engine_name -> EngineWorker
-        self._engines = []          # list of UCIEngine instances
+        self._engine_manager = EngineManager(self)
+        self._engine_manager.move_found.connect(self._on_engine_move)
+        self._engine_manager.search_info.connect(self._on_search_info)
         self._heatmap_on = False
         # --- Widgets ---
         self._eval_bar = EvaluationBar()
@@ -101,11 +102,10 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            engine = UCIEngine(engine_path=path)
+            engine = self._engine_manager.add_external_engine(path)
         except Exception as e:
             QMessageBox.warning(self, "Engine Error", f"Failed to load engine:\n{e}")
             return
-        self._engines.append(engine)
         self._add_analysis_row(engine.name)
         self._status.showMessage(f"Loaded engine: {engine.name}")
 
@@ -169,21 +169,7 @@ class MainWindow(QMainWindow):
     def _start_engine(self):
         fen = self._board_widget.board.fen()
         time_ms = self._selected_time_ms()
-
-        # Duchess (default engine, no explicit instance — uses singleton)
-        duchess_worker = EngineWorker(fen, time_ms=time_ms)
-        duchess_worker.move_found.connect(self._on_engine_move)
-        duchess_worker.search_info.connect(self._on_search_info)
-        self._workers["__duchess__"] = duchess_worker
-        duchess_worker.start()
-
-        # External engines (ambient analysis only)
-        for engine in self._engines:
-            worker = EngineWorker(fen, time_ms=time_ms, engine=engine)
-            worker.move_found.connect(self._on_engine_move)
-            worker.search_info.connect(self._on_search_info)
-            self._workers[engine.name] = worker
-            worker.start()
+        self._engine_manager.start_multipv(fen, time_ms)
 
     def _on_search_info(self, name, info):
         """Handle real-time search info from any engine."""
@@ -265,7 +251,7 @@ class MainWindow(QMainWindow):
         self._status.showMessage(f"Your move ({turn}).")
         self._refresh_heatmap()
         self._control_panel.explorer.update_position(board.fen())
-        self._workers.clear()
+        self._engine_manager.stop_all()
 
     # --- Game over ---
 
@@ -412,7 +398,5 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Cleanly shut down engine workers to prevent QThread destroyed while thread is still running crashes."""
-        for worker in list(self._workers.values()):
-            if worker.isRunning():
-                worker.wait(3000)
+        self._engine_manager.shutdown()
         super().closeEvent(event)

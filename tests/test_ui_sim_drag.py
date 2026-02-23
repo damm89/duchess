@@ -55,3 +55,4 @@ def test_full_app_clicks(qtbot):
     # Wait to see if engine responds
     qtbot.wait(100)
     print("Done")
+    window.close()

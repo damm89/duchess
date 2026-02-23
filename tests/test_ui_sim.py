@@ -27,4 +27,5 @@ def test_full_app_clicks(qtbot):
     # Click empty square e4
     print("Clicking e4 square to move pawn...")
     QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(360, 360))
+    window.close()
 
