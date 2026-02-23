@@ -3,11 +3,11 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QTextEdit, QMessageBox, QStatusBar, QLabel, QComboBox,
-    QGroupBox, QGridLayout, QFileDialog,
+    QGroupBox, QGridLayout, QFileDialog, QInputDialog, QApplication
 )
 
 from duchess.board import DuchessBoard
@@ -83,6 +83,9 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Welcome to Duchess! Start a new game.")
+        
+        # Menu bar
+        self._create_menu_bar()
 
         # Add Duchess row to analysis panel
         self._duchess_name = "Duchess"
@@ -94,6 +97,94 @@ class MainWindow(QMainWindow):
 
     def _selected_time_ms(self):
         return self._control_panel.selected_time_ms()
+
+    # --- Menus ---
+    
+    def _create_menu_bar(self):
+        menubar = self.menuBar()
+        game_menu = menubar.addMenu("&Game")
+
+        import_fen = QAction("Import FEN...", self)
+        import_fen.triggered.connect(self._import_fen)
+        game_menu.addAction(import_fen)
+
+        export_fen = QAction("Copy FEN to Clipboard", self)
+        export_fen.triggered.connect(self._export_fen)
+        game_menu.addAction(export_fen)
+
+        game_menu.addSeparator()
+
+        import_pgn = QAction("Import PGN...", self)
+        import_pgn.triggered.connect(self._import_pgn)
+        game_menu.addAction(import_pgn)
+
+        export_pgn = QAction("Export PGN...", self)
+        export_pgn.triggered.connect(self._export_pgn)
+        game_menu.addAction(export_pgn)
+
+    def _import_fen(self):
+        fen, ok = QInputDialog.getText(self, "Import FEN", "Paste FEN string:")
+        if ok and fen:
+            try:
+                self._board_widget.set_fen(fen)
+                self._control_panel.clear_log()
+                self._move_number = 1
+                self._engine_manager.stop_all()
+                self._control_panel.explorer.update_position(self._board_widget.board.fen())
+                self._refresh_heatmap()
+                self._status.showMessage("Imported FEN position.")
+            except ValueError:
+                QMessageBox.warning(self, "Invalid FEN", "The provided FEN string is invalid.")
+
+    def _export_fen(self):
+        fen = self._board_widget.board.fen()
+        QApplication.clipboard().setText(fen)
+        self._status.showMessage("FEN copied to clipboard.")
+
+    def _import_pgn(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import PGN", "", "PGN Files (*.pgn);;All Files (*)")
+        if path:
+            import chess.pgn
+            try:
+                with open(path, "r") as f:
+                    game = chess.pgn.read_game(f)
+                if not game:
+                    raise ValueError("No game found in PGN.")
+                
+                board = game.board()
+                self._board_widget.set_fen(board.fen())
+                self._control_panel.clear_log()
+                self._move_number = 1
+                self._engine_manager.stop_all()
+
+                for move in game.mainline_moves():
+                    san = board.san(move)
+                    if board.turn == chess.WHITE:
+                        self._control_panel.insert_log(f"{self._move_number}. {san} ")
+                    else:
+                        self._control_panel.insert_log(f"{san}\n")
+                        self._move_number += 1
+                    board.push(move)
+                
+                self._board_widget._sync_pieces()
+                self._refresh_heatmap()
+                self._control_panel.explorer.update_position(board.fen())
+                self._status.showMessage(f"Imported game from {path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Import Error", f"Could not import PGN:\n{e}")
+
+    def _export_pgn(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export PGN", "", "PGN Files (*.pgn)")
+        if path:
+            import chess.pgn
+            try:
+                game = chess.pgn.Game.from_board(self._board_widget.board)
+                game.headers["Event"] = "Duchess Export"
+                with open(path, "w") as f:
+                    f.write(str(game))
+                self._status.showMessage(f"Exported game to {path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Export Error", f"Could not export PGN:\n{e}")
 
     # --- External engine loading ---
 
