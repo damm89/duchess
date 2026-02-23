@@ -7,13 +7,25 @@ This directory contains the training pipeline for the Neural Network Updated Eff
 The training pipeline consists of three steps: data generation, model training, and binary export.
 
 ### 1. Generate the Dataset
-First, extract millions of chess positions from the PostgreSQL `MasterGame` database. The script runs the `duchess_cli` engine to evaluate each position at a low depth to use as the training target.
+You have two options to generate the positional evaluation dataset required for training:
+
+**Option A: Duchess Self-Play (Recommended)**
+Instead of downloading massive human game databases, Duchess can play against herself from randomized starting positions to generate unbiased, high-quality games. These games are automatically saved to your local database.
+```bash
+# Run 10,000 games of the engine against itself on all CPU cores
+python nnue/selfplay.py --games 10000 --depth 4 --random-plies 8
+```
+
+**Option B: External Master Games Database**
+If you imported a massive PGN file (like Lichess or MegaBase) into your PostgreSQL database using the `Colossal Database Explorer` GUI or `pgn_importer.py` CLI, you can use those human games instead.
+
+Once you have games in your database from either Option A or B, extract the millions of (FEN, Evaluation) pairs:
 
 ```bash
 # Ensure you are in your Python virtual environment
 source ~/.pyenv/versions/duchess/bin/activate 
 
-# Run the dataset generator (adjust --games and --depth as needed)
+# Extract evaluations (adjust --games and --depth as needed)
 python nnue/dataset.py --games 50000 --out nnue/dataset.jsonl --depth 4
 ```
 
