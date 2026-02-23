@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace duchess {
@@ -135,7 +136,14 @@ static void handle_go(const std::vector<std::string>& tokens) {
 
     // Thread 0: main search thread (prints info and bestmove)
     search_threads.emplace_back([search_board, time_limit_ms, max_depth]() {
-        auto info_cb = [](const SearchResult& r, int elapsed_ms) {
+        // Pre-compute legal moves for this position so the info_cb can filter invalid PV moves
+        // (e.g. from TT hash collisions) before python-chess gets a chance to crash on them.
+        auto legal_moves = search_board.generate_legal_moves();
+        std::unordered_set<uint16_t> legal_encodings;
+        legal_encodings.reserve(legal_moves.size());
+        for (const auto& lm : legal_moves) legal_encodings.insert(lm.encode());
+
+        auto info_cb = [&legal_encodings](const SearchResult& r, int elapsed_ms) {
             int nps = elapsed_ms > 0 ? static_cast<int>(
                 static_cast<long long>(r.nodes) * 1000 / elapsed_ms) : 0;
 
@@ -145,7 +153,9 @@ static void handle_go(const std::vector<std::string>& tokens) {
                       << " time " << elapsed_ms
                       << " nps " << nps;
             
-            if (r.best_move.from_sq != r.best_move.to_sq) {
+            // Only emit pv if the move is legal in the root position
+            if (r.best_move.from_sq != r.best_move.to_sq &&
+                legal_encodings.count(r.best_move.encode())) {
                 std::cout << " pv " << r.best_move.to_uci();
             }
             std::cout << std::endl;
