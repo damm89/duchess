@@ -42,11 +42,17 @@ To enable perfect endgame evaluation, the engine incorporates the Fathom library
 1. **Download Tablebases:**
    Download the 3, 4, and 5-piece Syzygy tablebase files to a folder on your computer (6 and 7-piece tablebases are generally too large for standard use). These files have `.rtbw` (for WDL) and `.rtbz` (for DTZ) extensions.
    
-2. **Configure via UCI:**
+2. **Configure via UCI (External GUI):**
    When you start the engine (or configure it in a GUI like Arena/Cutechess/your own GUI), send the following UCI command to tell Duchess where the files are located:
 
 ```text
 setoption name SyzygyPath value /path/to/your/syzygy/directory
 ```
+
+3. **Configure via Duchess GUI:**
+   The Duchess Python GUI supports explicit multi-file selection for your tablebases. 
+   - Open the Duchess application, navigate to the **Syzygy Tablebases** panel in the controls.
+   - Click **Select Files (.rtbw/.rtbz)** and choose your 3, 4, and 5-piece files.
+   - The GUI will automatically create a managed directory and pass it to the engine via UCI.
 
 Once configured, tablebase probing is automatically integrated directly into the Alpha-Beta search!
