@@ -83,6 +83,22 @@ class ControlPanelWidget(QWidget):
         self._analysis_box.setLayout(self._analysis_layout)
         controls.addWidget(self._analysis_box)
 
+        # Active Settings Panel (Always Visible)
+        self._active_settings_box = QGroupBox("Active Resources")
+        self._active_settings_box.setStyleSheet("QGroupBox { font-weight: bold; }")
+        self._settings_layout = QVBoxLayout()
+        
+        # Import html formatting safe escapes
+        import html
+        book_display = html.escape(book_name or "None")
+        self._book_label = QLabel(f"<b>Book:</b> <span style='color: #2b78e4;'>{book_display}</span>")
+        self._tb_label = QLabel("<b>Syzygy:</b> <span style='color: #2b78e4;'>None</span>")
+        
+        self._settings_layout.addWidget(self._book_label)
+        self._settings_layout.addWidget(self._tb_label)
+        self._active_settings_box.setLayout(self._settings_layout)
+        controls.addWidget(self._active_settings_box)
+
         # Advanced Settings Accordion
         accordion = AccordionWidget()
         
@@ -100,8 +116,6 @@ class ControlPanelWidget(QWidget):
 
         # 2. Opening Books & Database
         book_sec = accordion.add_section("Opening Book & Database")
-        self._book_label = QLabel(f"Book: {book_name or 'None'}")
-        book_sec.add_widget(self._book_label)
         
         book_btn = QPushButton("Load Book...")
         book_btn.clicked.connect(self.load_book_requested.emit)
@@ -117,8 +131,6 @@ class ControlPanelWidget(QWidget):
 
         # 3. Syzygy Tablebases
         syzygy_sec = accordion.add_section("Syzygy Tablebases")
-        self._tb_label = QLabel("Files: None")
-        syzygy_sec.add_widget(self._tb_label)
         
         tb_btn = QPushButton("Select Files (.rtbw/.rtbz)")
         tb_btn.clicked.connect(self._select_syzygy_files)
@@ -139,7 +151,9 @@ class ControlPanelWidget(QWidget):
         return TIME_OPTIONS[self._time_combo.currentIndex()][1]
 
     def set_book_name(self, name: str):
-        self._book_label.setText(f"Book: {name or 'None'}")
+        import html
+        display_name = html.escape(name or "None")
+        self._book_label.setText(f"<b>Book:</b> <span style='color: #2b78e4;'>{display_name}</span>")
         
     def _select_syzygy_files(self):
         from PyQt6.QtWidgets import QFileDialog
@@ -150,7 +164,7 @@ class ControlPanelWidget(QWidget):
             "Syzygy (*.rtbw *.rtbz);;All Files (*)"
         )
         if files:
-            self._tb_label.setText(f"Files: {len(files)} loaded")
+            self._tb_label.setText(f"<b>Syzygy:</b> <span style='color: #2b78e4;'>{len(files)} files loaded</span>")
             self.syzygy_files_selected.emit(files)
         
     def append_log(self, text: str):
