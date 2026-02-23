@@ -2,7 +2,11 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from duchess.gui.worker import EngineWorker
+from duchess.gui.worker import EngineWorker
 from duchess.engine_wrapper import UCIEngine, get_engine
+import os
+import shutil
+from pathlib import Path
 
 
 class EngineManager(QObject):
@@ -16,7 +20,13 @@ class EngineManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._workers = {}  # engine_name -> EngineWorker
+        self._workers = {}  # engine_name -> EngineWorker
         self._engines = []  # list of external UCIEngine instances
+        self._syzygy_files = [] # list of paths
+        
+    def set_syzygy_files(self, files: list[str]):
+        """Store custom syzygy files to be symlinked before search."""
+        self._syzygy_files = files
 
     def add_external_engine(self, path: str) -> UCIEngine:
         """Load an external UCI engine from the given path."""
@@ -32,8 +42,39 @@ class EngineManager(QObject):
         """Start search on the given FEN on all loaded engines, including Duchess."""
         # Clean up any existing running workers before starting new ones
         self.stop_all()
+        
+        # Prepare Syzygy symlink directory if custom files are selected
+        syzygy_dir = None
+        if self._syzygy_files:
+            syzygy_dir = Path.home() / ".duchess" / "syzygy"
+            syzygy_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Clear old symlinks
+            for f in syzygy_dir.glob("*"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+                    
+            # Create new symlinks
+            for fpath in self._syzygy_files:
+                src = Path(fpath)
+                dst = syzygy_dir / src.name
+                try:
+                    # os.symlink might fail on Windows without admin rights, use hardlink or copy fallback
+                    if os.name == 'nt':
+                        shutil.copy2(src, dst)
+                    else:
+                        os.symlink(src, dst)
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to link tablebase {src}: {e}")
 
         # 1. Start Duchess (default engine via singleton)
+        engine = get_engine()
+        if syzygy_dir:
+            engine.set_option("SyzygyPath", str(syzygy_dir))
+            
         duchess_worker = EngineWorker(fen, time_ms=time_ms)
         self._connect_worker(duchess_worker)
         self._workers["__duchess__"] = duchess_worker
@@ -41,6 +82,11 @@ class EngineManager(QObject):
 
         # 2. Start all external ambient engines
         for engine in self._engines:
+            if syzygy_dir:
+                try:
+                    engine.set_option("SyzygyPath", str(syzygy_dir))
+                except Exception:
+                    pass
             worker = EngineWorker(fen, time_ms=time_ms, engine=engine)
             self._connect_worker(worker)
             self._workers[engine.name] = worker

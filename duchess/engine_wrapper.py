@@ -137,6 +137,13 @@ class UCIEngine:
         else:
             self.disable_book()
 
+    def set_option(self, name, value):
+        """Send a UCI setoption command."""
+        with self._lock:
+            self._send(f"setoption name {name} value {value}")
+            self._send("isready")
+            self._read_until("readyok")
+
     def _send(self, cmd):
         self._proc.stdin.write(cmd + "\n")
         self._proc.stdin.flush()

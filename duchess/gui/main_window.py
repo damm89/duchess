@@ -64,6 +64,7 @@ class MainWindow(QMainWindow):
         self._control_panel.reset_book_requested.connect(self._reset_default_book)
         self._control_panel.db_explorer_requested.connect(self._open_db_explorer)
         self._control_panel.explorer_move_clicked.connect(self._on_explorer_move)
+        self._control_panel.syzygy_files_selected.connect(self._engine_manager.set_syzygy_files)
 
         # Layout: eval bar | board | controls
         main_layout = QHBoxLayout()

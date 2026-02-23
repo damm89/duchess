@@ -26,6 +26,7 @@ class ControlPanelWidget(QWidget):
     reset_book_requested = pyqtSignal()
     db_explorer_requested = pyqtSignal()
     explorer_move_clicked = pyqtSignal(str) # UCI move text
+    syzygy_files_selected = pyqtSignal(list) # list of file paths
 
     def __init__(self, initial_book_name: str, parent=None):
         super().__init__(parent)
@@ -101,6 +102,17 @@ class ControlPanelWidget(QWidget):
         book_box.setLayout(book_layout)
         controls.addWidget(book_box)
 
+        # Syzygy Tablebases controls
+        syzygy_box = QGroupBox("Syzygy Tablebases")
+        syzygy_layout = QVBoxLayout()
+        self._tb_label = QLabel("Files: None")
+        syzygy_layout.addWidget(self._tb_label)
+        tb_btn = QPushButton("Select Files (.rtbw/.rtbz)")
+        tb_btn.clicked.connect(self._select_syzygy_files)
+        syzygy_layout.addWidget(tb_btn)
+        syzygy_box.setLayout(syzygy_layout)
+        controls.addWidget(syzygy_box)
+
         # Opening Explorer panel (data from Lichess Masters database)
         self._explorer = OpeningExplorerWidget()
         self._explorer.move_clicked.connect(self.explorer_move_clicked.emit)
@@ -114,6 +126,18 @@ class ControlPanelWidget(QWidget):
 
     def set_book_name(self, name: str):
         self._book_label.setText(f"Book: {name or 'None'}")
+        
+    def _select_syzygy_files(self):
+        from PyQt6.QtWidgets import QFileDialog
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Syzygy Tablebase Files",
+            "",
+            "Syzygy (*.rtbw *.rtbz);;All Files (*)"
+        )
+        if files:
+            self._tb_label.setText(f"Files: {len(files)} loaded")
+            self.syzygy_files_selected.emit(files)
         
     def append_log(self, text: str):
         self._log.append(text)
