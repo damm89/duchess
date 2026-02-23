@@ -154,7 +154,26 @@ static void handle_go(const std::vector<std::string>& tokens) {
         SearchResult result = search_uci(
             search_board, stop_flag, time_limit_ms, max_depth, info_cb, 0);
 
+        // Sanity check: verify the returned move is actually legal in the position.
+        // A TT hash collision can in rare cases cause an illegal bestmove to be returned.
         if (result.best_move.from_sq != result.best_move.to_sq) {
+            auto legal_moves = search_board.generate_legal_moves();
+            bool is_legal = false;
+            for (const auto& lm : legal_moves) {
+                if (lm.encode() == result.best_move.encode()) {
+                    is_legal = true;
+                    break;
+                }
+            }
+            if (!is_legal) {
+                // Fall back to the first legal move
+                if (!legal_moves.empty()) {
+                    result.best_move = legal_moves[0];
+                } else {
+                    std::cout << "bestmove (none)" << std::endl;
+                    return;
+                }
+            }
             std::cout << "bestmove " << result.best_move.to_uci() << std::endl;
         } else {
             std::cout << "bestmove (none)" << std::endl;
