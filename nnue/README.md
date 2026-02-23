@@ -37,10 +37,10 @@ python nnue/export.py nnue/duchess_nnue.pt nnue/duchess_nnue.bin
 
 ## Using Syzygy Tablebases
 
-To enable perfect endgame evaluation, the engine incorporates the Fathom library. When 6 or fewer pieces remain on the board, the engine will instantly return the exact mate or draw score without needing to calculate further.
+To enable perfect endgame evaluation, the engine incorporates the Fathom library. When 5 or fewer pieces remain on the board, the engine will instantly return the exact mate or draw score without needing to calculate further.
 
 1. **Download Tablebases:**
-   Download the 3, 4, 5, and/or 6-piece Syzygy tablebase files to a folder on your computer. These files have `.rtbw` (for WDL) and `.rtbz` (for DTZ) extensions.
+   Download the 3, 4, and 5-piece Syzygy tablebase files to a folder on your computer (6 and 7-piece tablebases are generally too large for standard use). These files have `.rtbw` (for WDL) and `.rtbz` (for DTZ) extensions.
    
 2. **Configure via UCI:**
    When you start the engine (or configure it in a GUI like Arena/Cutechess/your own GUI), send the following UCI command to tell Duchess where the files are located:
