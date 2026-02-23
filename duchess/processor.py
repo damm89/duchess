@@ -3,6 +3,7 @@ from duchess.chess_types import Move as _Move
 from duchess.board import DuchessBoard, InvalidMoveError, IllegalMoveError, AmbiguousMoveError
 from duchess.engine import ChessEngine
 from duchess.models import Game, Move, User
+from duchess.commands import HelpCommand, ResignCommand, StatusCommand, StartCommand, MoveCommand
 
 _engine = None
 
@@ -143,21 +144,23 @@ def process_email_move(sender_email, move_str, db_session):
 def _process(sender_email, move_str, db_session):
     user = _get_or_create_user(sender_email, db_session)
 
-    cmd = move_str.strip().lower()
-    if cmd in ("help", "?"):
-        game = _get_active_game(user, db_session)
-        if game:
-            board = DuchessBoard(game.fen)
-            return _make_response(HELP_TEXT, board)
-        return _make_response(HELP_TEXT)
-    if cmd in ("resign", "end"):
-        return _handle_resign(user, db_session)
-    if cmd in ("status", "show"):
-        return _handle_status(user, db_session)
-    if cmd.startswith("start"):
-        color = "black" if "black" in cmd else "white"
-        return _handle_start(user, color, db_session)
+    cmd_list = [
+        HelpCommand(),
+        ResignCommand(),
+        StatusCommand(),
+        StartCommand(),
+        MoveCommand()
+    ]
 
+    for command in cmd_list:
+        if command.match(move_str):
+            return command.execute(move_str, user, db_session)
+
+    # Should never reach here because MoveCommand is a fallback
+    return _make_response("Unknown command.")
+
+
+def _handle_move(move_str, user, db_session):
     game = _get_active_game(user, db_session)
 
     if game is None:
