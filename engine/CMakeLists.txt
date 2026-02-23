@@ -26,7 +26,18 @@ add_executable(duchess_cli src/main.cpp src/uci.cpp)
 target_link_libraries(duchess_cli PRIVATE duchess_engine_lib)
 
 # --- pybind11 Python module ---
-find_package(pybind11 REQUIRED)
+find_package(pybind11 QUIET)
+if (NOT pybind11_FOUND)
+    # Fallback to asking Python where pybind11 is (solves CI/CD environment issues)
+    execute_process(
+        COMMAND python -c "import pybind11; print(pybind11.get_cmake_dir())"
+        OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    list(APPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
+    find_package(pybind11 REQUIRED)
+endif()
+
 pybind11_add_module(duchess_engine src/bindings.cpp)
 target_link_libraries(duchess_engine PRIVATE duchess_engine_lib)
 
