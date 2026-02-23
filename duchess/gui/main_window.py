@@ -1,3 +1,5 @@
+# Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
+# Licensed under the MIT License. See LICENSE for details.
 """MainWindow — full game GUI: board + controls + move log + engine integration."""
 import sys
 from pathlib import Path
@@ -152,6 +154,28 @@ class MainWindow(QMainWindow):
         syzygy_tb = QAction("Select Syzygy Tablebases...", self)
         syzygy_tb.triggered.connect(self._control_panel._select_syzygy_files)
         advanced_menu.addAction(syzygy_tb)
+
+        # Help Menu
+        help_menu = menubar.addMenu("&Help")
+        about_action = QAction("About Duchess...", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
+    def _show_about(self):
+        QMessageBox.about(self, "About Duchess",
+            "<h2>Duchess Chess</h2>"
+            "<p>A from-scratch chess engine and analytical GUI.</p>"
+            "<p><b>Author:</b> Daniel Ammeraal</p>"
+            "<p><b>License:</b> MIT</p>"
+            "<p><b>Engine:</b> Custom C++ with UCI protocol<br>"
+            "Alpha-beta search, NNUE evaluation, Syzygy tablebases,<br>"
+            "Lazy SMP, transposition tables, Polyglot opening books</p>"
+            "<p><b>GUI:</b> Python / PyQt6</p>"
+            "<hr>"
+            "<p><small>Third-party: PyQt6, python-chess, SQLAlchemy, PyTorch, "
+            "Catch2, Fathom, gm2001 opening book.<br>"
+            "Developed with assistance from Claude by Anthropic.</small></p>"
+        )
 
     def _import_fen(self):
         fen, ok = QInputDialog.getText(self, "Import FEN", "Paste FEN string:")
