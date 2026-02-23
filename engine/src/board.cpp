@@ -111,6 +111,7 @@ void Board::parse_fen(const std::string& fen) {
     halfmove_clock_ = half;
     fullmove_number_ = full;
     hash_ = compute_zobrist_hash(*this);
+    nnue::refresh_accumulator(*this, accumulator_);
 }
 
 Board::Board() { set_starting_position(); }
@@ -647,11 +648,49 @@ void Board::make_move(const Move& m) {
     // En passant capture
     bool is_ep = (moved == Piece::WhitePawn || moved == Piece::BlackPawn) &&
                  m.to_sq == en_passant_sq_ && en_passant_sq_ >= 0;
+
+    int w_ksq = pop_lsb(bb(Piece::WhiteKing));
+    int b_ksq = pop_lsb(bb(Piece::BlackKing));
+    
+    // We must put the bits back because pop_lsb clears them
+    set_bit(bb(Piece::WhiteKing), w_ksq);
+    set_bit(bb(Piece::BlackKing), b_ksq);
+
+    bool king_moved = (moved == Piece::WhiteKing || moved == Piece::BlackKing);
+
     if (is_ep) {
         int cap_sq = m.to_sq + ((side_to_move_ == Color::White) ? -8 : 8);
         Piece ep_pawn = piece_at_sq(cap_sq);
+
+        if (!king_moved) {
+            int w_pt_ep = nnue::get_piece_type(ep_pawn, Color::White);
+            int b_pt_ep = nnue::get_piece_type(ep_pawn, Color::Black);
+            if (w_pt_ep != -1 && b_pt_ep != -1) {
+                accumulator_.sub_feature(nnue::make_feature(w_ksq, w_pt_ep, cap_sq),
+                                         nnue::make_feature(b_ksq, b_pt_ep, cap_sq));
+            }
+        }
+
         remove_piece_sq(cap_sq);
         hash_ ^= piece_keys[static_cast<int>(ep_pawn) - 1][cap_sq];
+    }
+
+    // NNUE: Sub moved piece and captured piece from old squares
+    if (!king_moved) {
+        int w_pt_moved = nnue::get_piece_type(moved, Color::White);
+        int b_pt_moved = nnue::get_piece_type(moved, Color::Black);
+        if (w_pt_moved != -1 && b_pt_moved != -1) {
+            accumulator_.sub_feature(nnue::make_feature(w_ksq, w_pt_moved, m.from_sq),
+                                     nnue::make_feature(b_ksq, b_pt_moved, m.from_sq));
+        }
+        if (captured != Piece::None) {
+            int w_pt_cap = nnue::get_piece_type(captured, Color::White);
+            int b_pt_cap = nnue::get_piece_type(captured, Color::Black);
+            if (w_pt_cap != -1 && b_pt_cap != -1) {
+                accumulator_.sub_feature(nnue::make_feature(w_ksq, w_pt_cap, m.to_sq),
+                                         nnue::make_feature(b_ksq, b_pt_cap, m.to_sq));
+            }
+        }
     }
 
     // Hash: remove moved piece from source
@@ -667,6 +706,16 @@ void Board::make_move(const Move& m) {
     remove_piece_sq(m.to_sq);
     Piece placed = (m.promotion != Piece::None) ? m.promotion : moved;
     set_bit(bb(placed), m.to_sq);
+
+    // NNUE: Add placed piece at new square
+    if (!king_moved) {
+        int w_pt_placed = nnue::get_piece_type(placed, Color::White);
+        int b_pt_placed = nnue::get_piece_type(placed, Color::Black);
+        if (w_pt_placed != -1 && b_pt_placed != -1) {
+            accumulator_.add_feature(nnue::make_feature(w_ksq, w_pt_placed, m.to_sq),
+                                     nnue::make_feature(b_ksq, b_pt_placed, m.to_sq));
+        }
+    }
 
     // Hash: add placed piece at destination
     hash_ ^= piece_keys[static_cast<int>(placed) - 1][m.to_sq];
@@ -731,6 +780,10 @@ void Board::make_move(const Move& m) {
     // Switch side
     side_to_move_ = (side_to_move_ == Color::White) ? Color::Black : Color::White;
     hash_ ^= side_key;
+
+    if (king_moved) {
+        nnue::refresh_accumulator(*this, accumulator_);
+    }
 }
 
 void Board::make_null_move() {

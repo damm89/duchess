@@ -4,6 +4,7 @@ project(duchess_engine LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
 
 # --- Engine library ---
 add_library(duchess_engine_lib
@@ -15,6 +16,7 @@ add_library(duchess_engine_lib
     src/zobrist.cpp
     src/tt.cpp
     src/polyglot.cpp
+    src/nnue.cpp
     fathom/src/tbprobe.c
 )
 target_include_directories(duchess_engine_lib PUBLIC include fathom/src)
@@ -47,6 +49,7 @@ add_executable(duchess_tests
     tests/test_tt.cpp
     tests/test_polyglot.cpp
     tests/test_syzygy.cpp
+    tests/test_nnue.cpp
 )
 target_link_libraries(duchess_tests PRIVATE duchess_engine_lib Catch2::Catch2WithMain)
 

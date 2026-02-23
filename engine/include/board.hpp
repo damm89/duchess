@@ -3,6 +3,7 @@
 #include "bitboard.hpp"
 #include <string>
 #include <vector>
+#include "nnue.h"
 
 namespace duchess {
 
@@ -63,6 +64,8 @@ public:
     int halfmove_clock() const { return halfmove_clock_; }
     uint64_t hash() const { return hash_; }
     std::string to_fen() const;
+    nnue::Accumulator* get_accumulator() { return &accumulator_; }
+    const nnue::Accumulator* get_accumulator() const { return &accumulator_; }
 
     std::vector<Move> generate_legal_moves() const;
     std::vector<Move> generate_tactical_moves() const;
@@ -93,6 +96,8 @@ private:
     int halfmove_clock_ = 0;
     int fullmove_number_ = 1;
     uint64_t hash_ = 0;
+
+    nnue::Accumulator accumulator_;
 
     static constexpr uint8_t CASTLE_WK = 1;
     static constexpr uint8_t CASTLE_WQ = 2;

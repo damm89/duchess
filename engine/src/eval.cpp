@@ -1,4 +1,5 @@
 #include "eval.hpp"
+#include "nnue.h"
 
 namespace duchess {
 
@@ -107,6 +108,12 @@ int evaluate(const Board& board) {
             return -MATE_SCORE;  // we are checkmated
         }
         return 0;  // stalemate
+    }
+
+    // Try NNUE eval first
+    int nnue_score = nnue::evaluate(static_cast<int>(board.side_to_move()), *board.get_accumulator());
+    if (nnue_score != 0) {
+        return nnue_score;
     }
 
     int white_score = 0;
