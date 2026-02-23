@@ -42,6 +42,12 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
 
     extracted_positions = 0
 
+    def start_engine():
+        eng = chess.engine.SimpleEngine.popen_uci(engine_path)
+        return eng
+
+    engine = start_engine()
+
     with open(output_file, "w", encoding="utf-8") as f:
         for idx, row in enumerate(games):
             if idx % 100 == 0:
@@ -67,6 +73,10 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
                 # Skip the opening moves to avoid training on pure theory memorization
                 if move_idx < 15:
                     continue
+                
+                # Never analyse game-over positions — the engine returns (none) or crashes
+                if board.is_game_over():
+                    break
                     
                 # Extract roughly 1 in every 5 positions to avoid heavy correlation
                 if move_idx % 5 == 0:
@@ -86,11 +96,19 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
                             "wdl": wdl
                         }) + "\n")
                         extracted_positions += 1
-                    except chess.engine.EngineTerminatedError:
-                        logging.error("Engine crashed during evaluation.")
-                        break
+                    except (chess.engine.EngineError, chess.engine.EngineTerminatedError) as e:
+                        logging.warning(f"Engine error on position {board.fen()}: {e}. Restarting engine...")
+                        try:
+                            engine.quit()
+                        except Exception:
+                            pass
+                        engine = start_engine()
+                        continue
                     
-    engine.quit()
+    try:
+        engine.quit()
+    except Exception:
+        pass
     logging.info(f"Finished dataset generation. Saved {extracted_positions} positions to {output_file}.")
 
 if __name__ == "__main__":
