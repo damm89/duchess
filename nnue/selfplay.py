@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import logging
 import multiprocessing
 import os
@@ -11,6 +12,7 @@ import chess
 import chess.engine
 import chess.pgn
 from sqlalchemy.orm import Session
+from tqdm import tqdm
 
 # Add project root to path so we can import duchess modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -121,30 +123,39 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
             # so we use imap_unordered to process and save them in real-time.
             jobs = (pool.apply_async(play_game, (engine_path, depth, random_plies)) for _ in range(num_games))
             
-            for job in jobs:
-                result = job.get()
-                if result:
-                    batch.append(result)
-                    completed_games += 1
+            with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
+                for job in jobs:
+                    result = job.get()
+                    pbar.update(1)
                     
-                    if len(batch) >= batch_size:
-                        try:
-                            db.bulk_insert_mappings(MasterGame, batch)
-                            db.commit()
-                            batch.clear()
-                            logger.info(f"Generated {completed_games}/{num_games} games...")
-                        except Exception as e:
-                            db.rollback()
-                            logger.error(f"Failed to insert batch: {e}")
-            
-            # Insert final remainder
-            if batch:
-                try:
-                    db.bulk_insert_mappings(MasterGame, batch)
-                    db.commit()
-                except Exception as e:
-                    db.rollback()
-                    logger.error(f"Failed to insert final batch: {e}")
+                    rate = pbar.format_dict.get("rate")
+                    if rate:
+                        avg_time = 1.0 / rate
+                        eta_seconds = (pbar.total - pbar.n) / rate
+                        eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
+                        pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
+                        
+                    if result:
+                        batch.append(result)
+                        completed_games += 1
+                        
+                        if len(batch) >= batch_size:
+                            try:
+                                db.bulk_insert_mappings(MasterGame, batch)
+                                db.commit()
+                                batch.clear()
+                            except Exception as e:
+                                db.rollback()
+                                pbar.write(f"Failed to insert batch: {e}")
+                
+                # Insert final remainder
+                if batch:
+                    try:
+                        db.bulk_insert_mappings(MasterGame, batch)
+                        db.commit()
+                    except Exception as e:
+                        db.rollback()
+                        pbar.write(f"Failed to insert final batch: {e}")
                     
     except KeyboardInterrupt:
         logger.warning("\nCaught Ctrl+C! Killing workers...")
