@@ -174,7 +174,7 @@ void Board::remove_piece_sq(int square) {
 int Board::king_square() const {
     Piece king = (side_to_move_ == Color::White) ? Piece::WhiteKing : Piece::BlackKing;
     Bitboard k = bb(king);
-    return __builtin_ctzll(k);
+    return ctzll(k);
 }
 
 std::string Board::to_fen() const {
@@ -474,7 +474,7 @@ std::vector<Move> Board::generate_legal_moves() const {
         }
 
         // Check if king is safe
-        int ksq = __builtin_ctzll(copy.bb(our_king));
+        int ksq = ctzll(copy.bb(our_king));
         if (!copy.is_attacked(ksq, enemy)) {
             legal.push_back(m);
         }
@@ -628,7 +628,7 @@ std::vector<Move> Board::generate_tactical_moves() const {
         set_bit(copy.bb(placed), m.to_sq);
 
         // Check if king is safe
-        int ksq = __builtin_ctzll(copy.bb(our_king));
+        int ksq = ctzll(copy.bb(our_king));
         if (!copy.is_attacked(ksq, enemy)) {
             legal.push_back(m);
         }

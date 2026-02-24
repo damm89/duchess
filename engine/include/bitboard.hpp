@@ -4,6 +4,10 @@
 
 #include <cstdint>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 namespace duchess {
 
 using Bitboard = uint64_t;
@@ -20,15 +24,34 @@ inline constexpr void set_bit(Bitboard& bb, int square) { bb |= bit(square); }
 inline constexpr void clear_bit(Bitboard& bb, int square) { bb &= ~bit(square); }
 inline constexpr bool test_bit(Bitboard bb, int square) { return (bb >> square) & 1; }
 
+// Cross-platform bit intrinsics
+inline int ctzll(uint64_t x) {
+#ifdef _MSC_VER
+    unsigned long idx;
+    _BitScanForward64(&idx, x);
+    return static_cast<int>(idx);
+#else
+    return __builtin_ctzll(x);
+#endif
+}
+
+inline int popcountll(uint64_t x) {
+#ifdef _MSC_VER
+    return static_cast<int>(__popcnt64(x));
+#else
+    return __builtin_popcountll(x);
+#endif
+}
+
 // Pop least significant bit, return its index
 inline int pop_lsb(Bitboard& bb) {
-    int idx = __builtin_ctzll(bb);
+    int idx = ctzll(bb);
     bb &= bb - 1;
     return idx;
 }
 
 inline int popcount(Bitboard bb) {
-    return __builtin_popcountll(bb);
+    return popcountll(bb);
 }
 
 // Precomputed attack tables

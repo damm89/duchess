@@ -101,8 +101,8 @@ void refresh_accumulator(const Board& board, Accumulator& acc) {
     std::memcpy(acc.white.data(), ft_bias, sizeof(ft_bias));
     std::memcpy(acc.black.data(), ft_bias, sizeof(ft_bias));
 
-    int w_ksq = __builtin_ctzll(board.bitboard_of(Piece::WhiteKing));
-    int b_ksq = __builtin_ctzll(board.bitboard_of(Piece::BlackKing));
+    int w_ksq = ctzll(board.bitboard_of(Piece::WhiteKing));
+    int b_ksq = ctzll(board.bitboard_of(Piece::BlackKing));
     
     // In many implementations, the black king square is mirrored (ksq ^ 56) to maintain symmetry, 
     // but our PyTorch implementation did not mirror. We just used it directly.
