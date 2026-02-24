@@ -53,11 +53,14 @@ Move Move::from_uci(const std::string& uci) {
     m.from_sq = sq(uci[1] - '1', uci[0] - 'a');
     m.to_sq = sq(uci[3] - '1', uci[2] - 'a');
     if (uci.size() == 5) {
+        // Determine promotion color from target rank:
+        // rank 8 (row 7) = White promoted, rank 1 (row 0) = Black promoted
+        bool black_promo = (sq_row(m.to_sq) == 0);
         switch (uci[4]) {
-            case 'q': m.promotion = Piece::WhiteQueen; break;
-            case 'r': m.promotion = Piece::WhiteRook; break;
-            case 'b': m.promotion = Piece::WhiteBishop; break;
-            case 'n': m.promotion = Piece::WhiteKnight; break;
+            case 'q': m.promotion = black_promo ? Piece::BlackQueen  : Piece::WhiteQueen;  break;
+            case 'r': m.promotion = black_promo ? Piece::BlackRook   : Piece::WhiteRook;   break;
+            case 'b': m.promotion = black_promo ? Piece::BlackBishop : Piece::WhiteBishop; break;
+            case 'n': m.promotion = black_promo ? Piece::BlackKnight : Piece::WhiteKnight; break;
             default: break;
         }
     }
