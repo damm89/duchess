@@ -104,7 +104,8 @@ def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epoch
     for epoch in range(epochs):
         model.train()
         total_loss = 0.0
-        for u_idx, u_off, t_idx, t_off, targets in dataloader:
+        num_batches = len(dataloader)
+        for batch_idx, (u_idx, u_off, t_idx, t_off, targets) in enumerate(dataloader):
             u_idx, u_off = u_idx.to(device), u_off.to(device)
             t_idx, t_off = t_idx.to(device), t_off.to(device)
             targets = targets.to(device)
@@ -118,11 +119,16 @@ def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epoch
             optimizer.step()
             
             total_loss += loss.item()
+        
+        # Synchronize MPS to prevent macOS Metal GPU queue from hanging
+        if device.type == "mps":
+            torch.mps.synchronize()
             
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(dataloader):.4f}")
+        avg_loss = total_loss / max(num_batches, 1)
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.6f}", flush=True)
         
     torch.save(model.state_dict(), out_file)
-    print(f"Saved PyTorch model to {out_file}")
+    print(f"Saved PyTorch model to {out_file}", flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Duchess NNUE model")
