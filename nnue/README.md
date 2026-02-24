@@ -1,74 +1,147 @@
-# Duchess NNUE & Syzygy Guide
+# Duchess NNUE & Training Pipeline
 
-This directory contains the training pipeline for the Neural Network Updated Efficiently (NNUE) evaluation function used by Duchess, as well as instructions for enabling perfect endgame play via Syzygy Tablebases.
+This directory contains the full pipeline for training, exporting, and iteratively improving the Neural Network Updated Efficiently (NNUE) evaluation function used by the Duchess C++ engine.
 
-## Training the NNUE Model
+---
 
-The training pipeline consists of three steps: data generation, model training, and binary export.
+## Architecture
 
-### 1. Generate the Dataset
-You have two options to generate the positional evaluation dataset required for training:
+The NNUE is a **HalfKP** architecture: `41024 → 256 → 32 → 32 → 1`.
 
-**Option A: Duchess Self-Play (Recommended)**
-Instead of downloading massive human game databases, Duchess can play against herself from randomized starting positions to generate unbiased, high-quality games. These games are automatically saved to your local database.
-```bash
-# Run 10,000 games of the engine against itself on all CPU cores (e.g., 10 for Apple M4)
-python nnue/selfplay.py --games 10000 --threads 10 --depth 4 --random-plies 8
+- The Feature Transformer (FT) layer maps each piece's relationship to its king into a 256-dimensional accumulator.
+- The accumulator is **incrementally updated** on every `make_move()` call — the full 41 K-input layer is never re-evaluated from scratch.
+- The FC layers use `int8` activations and are auto-vectorized by the compiler into SIMD instructions for maximum throughput.
+- Weights are **hot-swappable** at runtime via the UCI `NNUEFile` option without restarting the engine.
+
+---
+
+## Pipeline Overview
+
 ```
-*(Note: A "ply" in chess terminology is a half-move, i.e., one turn taken by one player. So `--random-plies 8` means the game will begin with 4 full moves of completely random play before the engine takes over, ensuring the generated dataset is rich and diverse.)*
+selfplay.py  →  PostgreSQL DB  →  dataset.py  →  train.py  →  export.py  →  duchess.bin
+     ↑                                                                            │
+     └──────────────── rl_loop.py (orchestrates all steps in a loop) ────────────┘
+```
 
-**Option B: External Master Games Database**
-If you imported a massive PGN file (like Lichess or MegaBase) into your PostgreSQL database using the `Colossal Database Explorer` GUI or `pgn_importer.py` CLI, you can use those human games instead.
+---
 
-Once you have games in your database from either Option A or B, extract the millions of (FEN, Evaluation) pairs:
+## Option 1 — Automated Iterative RL Loop (Recommended)
+
+`rl_loop.py` orchestrates the entire AlphaZero-style self-improvement cycle automatically. Each iteration:
+
+1. Generates self-play games using the **current best network**
+2. Extracts (FEN, evaluation) pairs into a `.jsonl` dataset
+3. Trains a new PyTorch model with MSE loss
+4. Exports the model weights to a C++ `.bin` file
+5. **Loads the new network for the next iteration**
 
 ```bash
-# Ensure you are in your Python virtual environment
-source ~/.pyenv/versions/duchess/bin/activate 
+# Basic: 10 iterations, 5000 games each, 6 threads
+python nnue/rl_loop.py --iterations 10 --games-per-iter 5000 --threads 6 --epochs-per-iter 20
 
-# Extract evaluations (adjust --games and --depth as needed)
+# With Syzygy tablebases for perfect endgame quality
+python nnue/rl_loop.py --iterations 10 --games-per-iter 5000 --threads 6 \
+    --syzygy ~/Desktop/Duchess/Syzygy
+
+# Bootstrap from an existing network (e.g. a previous training run)
+python nnue/rl_loop.py --iterations 10 --start-nnue nnue/duchess.bin \
+    --games-per-iter 5000 --threads 6
+```
+
+The latest trained network is always copied to `nnue/duchess.bin` at the end of each iteration. The Duchess GUI automatically loads this file on startup.
+
+---
+
+## Option 2 — Manual Step-by-Step
+
+### Step 1: Generate Self-Play Games
+
+Duchess plays against herself from randomized openings, saving complete games to your PostgreSQL database. Each game starts with `--random-plies` fully random half-moves to ensure opening diversity.
+
+```bash
+# 10,000 games with Syzygy tablebases for perfect endgames
+python nnue/selfplay.py --games 10000 --threads 6 --depth 4 --random-plies 8 \
+    --syzygy ~/Desktop/Duchess/Syzygy
+
+# Or without tablebases
+python nnue/selfplay.py --games 10000 --threads 6 --depth 4 --random-plies 8
+
+# Bootstrap from a specific NNUE network
+python nnue/selfplay.py --games 10000 --threads 6 --nnue nnue/duchess.bin
+```
+
+> [!NOTE]
+> A "ply" is one half-move. `--random-plies 8` = 4 full random moves before the engine takes over, creating rich opening diversity. Worker crashes (e.g. illegal moves) are caught and the game is discarded automatically.
+
+### Step 2: Extract Dataset
+
+Fetches games from the database and asks the engine to statically evaluate each position at a given depth, producing a JSONL training file.
+
+```bash
 python nnue/dataset.py --games 50000 --out nnue/dataset.jsonl --depth 4
 ```
 
-### 2. Train the Model
-Once you have the `dataset.jsonl` file, you can train the `HalfKP` PyTorch architecture using Mean Squared Error (MSE) loss. The resulting model is saved as a PyTorch `.pt` file.
+`dataset.py` is resilient: it skips game-over positions automatically and restarts the engine subprocess if it crashes mid-run.
+
+### Step 3: Train the Model
 
 > [!TIP]
-> **Apple Silicon Acceleration:** PyTorch in `train.py` detects if you are on an Apple Silicon chip (M1/M2/M3/M4) and will automatically utilize the `mps` (Metal Performance Shaders) GPU backend if available, vastly accelerating training compared to standard CPU execution.
+> **Apple Silicon:** PyTorch automatically uses the `mps` Metal GPU backend on M1/M2/M3/M4 chips, providing a large speedup over CPU.
 
 ```bash
 python nnue/train.py --data nnue/dataset.jsonl --out nnue/duchess_nnue.pt --epochs 20
 ```
 
-### 3. Export to C++ Binary
-The C++ engine cannot read PyTorch `.pt` files directly. This script quantizes the floating-point weights into highly compressed `int16` and `int8` integers and flattens them into a raw binary `.bin` file.
+### Step 4: Export to C++ Binary
+
+Quantizes the PyTorch float weights into `int16` (FT) and `int8` (FC layers) and serializes them into a flat binary format the engine can mmap-load at startup.
 
 ```bash
 python nnue/export.py nnue/duchess_nnue.pt nnue/duchess_nnue.bin
 ```
 
-*Note: Make sure the resulting `duchess_nnue.bin` file is placed in the `nnue/` directory relative to where the engine is executed, so the C++ engine can load it on startup.*
+---
+
+## Hot-Swapping the Network
+
+The engine supports loading a different NNUE network at runtime without restart via the `NNUEFile` UCI option:
+
+```text
+setoption name NNUEFile value /absolute/path/to/duchess.bin
+```
+
+The Duchess Python GUI uses this to auto-load `nnue/duchess.bin` on startup whenever it exists.
 
 ---
 
-## Using Syzygy Tablebases
+## Using Syzygy Tablebases During Self-Play
 
-To enable perfect endgame evaluation, the engine incorporates the Fathom library. When 5 or fewer pieces remain on the board, the engine will instantly return the exact mate or draw score without needing to calculate further.
+Pass the `--syzygy` flag to `selfplay.py` or `rl_loop.py` with the path to your tablebase directory. Fathom scans the directory recursively for `.rtbw`/`.rtbz` files.
 
-1. **Download Tablebases:**
-   Download the 3, 4, and 5-piece Syzygy tablebase files to a folder on your computer (6 and 7-piece tablebases are generally too large for standard use). These files have `.rtbw` (for WDL) and `.rtbz` (for DTZ) extensions.
-   
-2. **Configure via UCI (External GUI):**
-   When you start the engine (or configure it in a GUI like Arena/Cutechess/your own GUI), send the following UCI command to tell Duchess where the files are located:
-
-```text
-setoption name SyzygyPath value /path/to/your/syzygy/directory
+```bash
+python nnue/selfplay.py --games 5000 --threads 6 --syzygy ~/Desktop/Duchess/Syzygy
 ```
 
-3. **Configure via Duchess GUI:**
-   The Duchess Python GUI supports explicit multi-file selection for your tablebases. 
-   - Open the Duchess application, navigate to the **Syzygy Tablebases** panel in the controls.
-   - Click **Select Files (.rtbw/.rtbz)** and choose your 3, 4, and 5-piece files.
-   - The GUI will automatically create a managed directory and pass it to the engine via UCI.
+With tablebases, the engine plays **provably perfect** moves in positions with ≤5 pieces, resulting in cleaner endgame training data and fewer drawn-out games.
 
-Once configured, tablebase probing is automatically integrated directly into the Alpha-Beta search!
+---
+
+## Configuring Syzygy in the GUI / UCI
+
+To enable tablebases for regular play:
+
+- **UCI command:** `setoption name SyzygyPath value /path/to/syzygy/directory`
+- **Duchess GUI:** Open the **Syzygy Tablebases** panel in the controls, click **Select Files (.rtbw/.rtbz)**, and the GUI manages a symlink directory automatically.
+
+---
+
+## Generated Files (git-ignored)
+
+The following files are produced by the pipeline and kept local only:
+
+| Pattern | Description |
+|---|---|
+| `dataset*.jsonl` | Raw (FEN, score) extraction files |
+| `duchess_iter_*.pt` | Per-iteration PyTorch model checkpoints |
+| `duchess_iter_*.bin` | Per-iteration C++ binary exports |
+| `duchess.bin` | **Current best network** — loaded by GUI on startup |
