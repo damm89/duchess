@@ -33,12 +33,6 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
         return
 
     logging.info(f"Loaded {len(games)} games from DB. Starting engine {engine_path} at depth {depth}...")
-    
-    try:
-        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
-    except Exception as e:
-        logging.error(f"Failed to start engine: {e}")
-        return
 
     extracted_positions = 0
 
@@ -46,7 +40,11 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
         eng = chess.engine.SimpleEngine.popen_uci(engine_path)
         return eng
 
-    engine = start_engine()
+    try:
+        engine = start_engine()
+    except Exception as e:
+        logging.error(f"Failed to start engine: {e}")
+        return
 
     with open(output_file, "w", encoding="utf-8") as f:
         for idx, row in enumerate(games):
@@ -81,7 +79,7 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
                 # Extract roughly 1 in every 5 positions to avoid heavy correlation
                 if move_idx % 5 == 0:
                     try:
-                        info = engine.analyse(board, chess.engine.Limit(depth=depth))
+                        info = engine.analyse(board, chess.engine.Limit(depth=depth, time=10.0))
                         score = info["score"].white()
                         
                         # We skip forced mates for simple evaluations right now
@@ -96,7 +94,7 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
                             "wdl": wdl
                         }) + "\n")
                         extracted_positions += 1
-                    except (chess.engine.EngineError, chess.engine.EngineTerminatedError) as e:
+                    except (chess.engine.EngineError, chess.engine.EngineTerminatedError, TimeoutError) as e:
                         logging.warning(f"Engine error on position {board.fen()}: {e}. Restarting engine...")
                         try:
                             engine.quit()
