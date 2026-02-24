@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--threads", type=int, default=10, help="Number of engine threads for self-play.")
     parser.add_argument("--start-nnue", type=str, default="", help="Optional: Path to an existing .bin network to bootstrap from.")
     parser.add_argument("--epochs-per-iter", type=int, default=20, help="Number of training epochs per iteration.")
+    parser.add_argument("--syzygy", type=str, default="", help="Optional: Path to Syzygy tablebase directory for perfect endgame play during self-play.")
     
     args = parser.parse_args()
     
@@ -78,6 +79,9 @@ def main():
             logger.info(f"Using network weights from: {current_nnue}")
         else:
             logger.info("Using hardcoded classical evaluation.")
+        if args.syzygy and os.path.isdir(args.syzygy):
+            selfplay_cmd.extend(["--syzygy", args.syzygy])
+            logger.info(f"Using Syzygy tablebases from: {args.syzygy}")
             
         if not run_step("Self-Play Generation", selfplay_cmd):
             sys.exit(1)
