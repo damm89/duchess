@@ -1,16 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
+ROOT = os.path.dirname(SPEC_DIR)
 
 block_cipher = None
 
 a = Analysis(
-    ['duchess/main.py'],
-    pathex=[],
+    [os.path.join(ROOT, 'duchess', 'main.py')],
+    pathex=[ROOT],
     binaries=[
-        ('engine/build/Release/duchess_cli.exe', '.'),
+        (os.path.join(ROOT, 'engine', 'build', 'Release', 'duchess_cli.exe'), '.'),
     ],
     datas=[
-        ('data/gm2001.bin', 'data'),
-        ('assets/duchess_icon.png', 'assets'),
+        (os.path.join(ROOT, 'data', 'gm2001.bin'), 'data'),
+        (os.path.join(ROOT, 'assets', 'duchess_icon.png'), 'assets'),
     ],
     hiddenimports=['sqlalchemy.ext.baked', 'psycopg2', 'psycopg2-binary'],
     hookspath=[],
@@ -39,7 +42,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/duchess_icon.png'
+    icon=os.path.join(ROOT, 'assets', 'duchess_icon.png')
 )
 coll = COLLECT(
     exe,
