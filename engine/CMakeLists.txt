@@ -4,7 +4,15 @@ project(duchess_engine LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+
+option(DUCHESS_NATIVE_ARCH "Use -march=native for local CPU optimizations" ON)
+if (DUCHESS_NATIVE_ARCH AND NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+elseif (MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+endif()
 
 # --- Engine library ---
 add_library(duchess_engine_lib
@@ -25,21 +33,31 @@ target_include_directories(duchess_engine_lib PUBLIC include fathom/src)
 add_executable(duchess_cli src/main.cpp src/uci.cpp)
 target_link_libraries(duchess_cli PRIVATE duchess_engine_lib)
 
-# --- pybind11 Python module ---
-find_package(pybind11 QUIET)
-if (NOT pybind11_FOUND)
-    # Fallback to asking Python where pybind11 is (solves CI/CD environment issues)
-    execute_process(
-        COMMAND python -c "import pybind11; print(pybind11.get_cmake_dir())"
-        OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    list(APPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
-    find_package(pybind11 REQUIRED)
+# --- pybind11 Python module (optional — skipped in CI builds) ---
+option(DUCHESS_BUILD_PYTHON "Build Python bindings via pybind11" ON)
+if (DUCHESS_BUILD_PYTHON)
+    find_package(pybind11 QUIET)
+    if (NOT pybind11_FOUND)
+        execute_process(
+            COMMAND python -c "import pybind11; print(pybind11.get_cmake_dir())"
+            OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE PYBIND11_RESULT
+        )
+        if (PYBIND11_RESULT EQUAL 0)
+            list(APPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
+            find_package(pybind11 REQUIRED)
+        else()
+            message(WARNING "pybind11 not found — skipping Python bindings. Install with: pip install pybind11")
+            set(DUCHESS_BUILD_PYTHON OFF)
+        endif()
+    endif()
 endif()
 
-pybind11_add_module(duchess_engine src/bindings.cpp)
-target_link_libraries(duchess_engine PRIVATE duchess_engine_lib)
+if (DUCHESS_BUILD_PYTHON)
+    pybind11_add_module(duchess_engine src/bindings.cpp)
+    target_link_libraries(duchess_engine PRIVATE duchess_engine_lib)
+endif()
 
 # --- Catch2 via FetchContent ---
 include(FetchContent)

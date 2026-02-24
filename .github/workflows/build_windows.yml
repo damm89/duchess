@@ -27,8 +27,8 @@ jobs:
     - name: Build C++ Engine
       run: |
         cd engine
-        cmake -B build -S .
-        cmake --build build --config Release
+        cmake -B build -S . -DDUCHESS_BUILD_PYTHON=OFF -DDUCHESS_NATIVE_ARCH=OFF
+        cmake --build build --config Release --target duchess_cli
 
     - name: Build Python Executable
       run: |
