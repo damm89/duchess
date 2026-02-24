@@ -34,7 +34,7 @@ jobs:
 
     - name: Build Python Executable
       run: |
-        pyinstaller duchess_windows.spec
+        pyinstaller packaging/duchess_windows.spec
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
