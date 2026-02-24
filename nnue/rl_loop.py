@@ -52,6 +52,8 @@ def main():
     parser.add_argument("--start-nnue", type=str, default="", help="Optional: Path to an existing .bin network to bootstrap from.")
     parser.add_argument("--epochs-per-iter", type=int, default=20, help="Number of training epochs per iteration.")
     parser.add_argument("--syzygy", type=str, default="", help="Optional: Path to Syzygy tablebase directory for perfect endgame play during self-play.")
+    parser.add_argument("--gauntlet-engine", type=str, default="", help="Optional: Path to an opponent UCI engine. When set, plays extra games vs this engine before each training step.")
+    parser.add_argument("--gauntlet-games", type=int, default=50, help="Number of gauntlet games per iteration (used with --gauntlet-engine).")
     
     args = parser.parse_args()
     
@@ -85,6 +87,22 @@ def main():
             
         if not run_step("Self-Play Generation", selfplay_cmd):
             sys.exit(1)
+
+        # 1b. Optional Gauntlet vs external engine
+        if args.gauntlet_engine and os.path.exists(args.gauntlet_engine):
+            gauntlet_cmd = [
+                PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "gauntlet.py"),
+                "--engine1", engine_path,
+                "--engine2", args.gauntlet_engine,
+                "--games", str(args.gauntlet_games),
+                "--threads", str(args.threads),
+            ]
+            if current_nnue and os.path.exists(current_nnue):
+                gauntlet_cmd.extend(["--nnue", current_nnue])
+            if args.syzygy and os.path.isdir(args.syzygy):
+                gauntlet_cmd.extend(["--syzygy", args.syzygy])
+            if not run_step(f"Gauntlet vs {os.path.basename(args.gauntlet_engine)}", gauntlet_cmd):
+                logger.warning("Gauntlet step failed — continuing without those games.")
             
         # 2. Extract Dataset
         jsonl_path = str(PROJECT_ROOT / "nnue" / f"dataset_iter_{i}.jsonl")
