@@ -12,7 +12,6 @@ if (DUCHESS_NATIVE_ARCH AND NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
 elseif (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2 /experimental:c11atomics")
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 endif()
@@ -31,6 +30,11 @@ add_library(duchess_engine_lib
     fathom/src/tbprobe.c
 )
 target_include_directories(duchess_engine_lib PUBLIC include fathom/src)
+
+# On MSVC, compile Fathom's C file as C++ to avoid C11 atomics issues
+if (MSVC)
+    set_source_files_properties(fathom/src/tbprobe.c PROPERTIES LANGUAGE CXX)
+endif()
 
 # --- UCI standalone executable ---
 add_executable(duchess_cli src/main.cpp src/uci.cpp)
