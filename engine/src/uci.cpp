@@ -57,6 +57,16 @@ static void handle_position(const std::vector<std::string>& tokens) {
     if (move_idx < tokens.size() && tokens[move_idx] == "moves") {
         for (size_t i = move_idx + 1; i < tokens.size(); ++i) {
             Move m = Move::from_uci(tokens[i]);
+            // Validate legality before applying to avoid board corruption
+            auto legal = board.generate_legal_moves();
+            bool found = false;
+            for (const auto& lm : legal) {
+                if (lm.encode() == m.encode()) { found = true; break; }
+            }
+            if (!found) {
+                // Stop at the first bad move rather than corrupting further
+                break;
+            }
             board.make_move(m);
         }
     }

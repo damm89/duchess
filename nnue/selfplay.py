@@ -69,6 +69,10 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
                 break
             
             try:
+                if result.move not in board.legal_moves:
+                    logger.warning(f"Engine returned illegal move {result.move} in fen {board.fen()}")
+                    engine.quit()
+                    return None
                 board.push(result.move)
             except ValueError:
                 logger.warning(f"Engine played illegal move {result.move} in fen {board.fen()}")
