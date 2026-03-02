@@ -34,22 +34,22 @@ def export_nnue(model_path, output_path):
         ft_b = (model.ft_bias.detach() * SCALE_QA).round().to(torch.int16)
         f.write(ft_b.numpy().tobytes())
 
-        # 5. FC1 Weights (32, 512) -> int8
+        # 5. FC1 Weights (128, 512) -> int8
         print("Writing fc1.weight...")
         fc1_w = (model.fc1.weight.detach() * SCALE_QB).round().to(torch.int8)
         f.write(fc1_w.numpy().tobytes())
 
-        # 6. FC1 Bias (32) -> int32
+        # 6. FC1 Bias (128) -> int32
         print("Writing fc1.bias...")
         fc1_b = (model.fc1.bias.detach() * SCALE_QA * SCALE_QB).round().to(torch.int32)
         f.write(fc1_b.numpy().tobytes())
 
-        # 7. FC2 Weights (32, 32) -> int8
+        # 7. FC2 Weights (128, 128) -> int8
         print("Writing fc2.weight...")
         fc2_w = (model.fc2.weight.detach() * SCALE_QB).round().to(torch.int8)
         f.write(fc2_w.numpy().tobytes())
 
-        # 8. FC2 Bias (32) -> int32
+        # 8. FC2 Bias (128) -> int32
         print("Writing fc2.bias...")
         # Actually in standard HalfKP, the accumulator after FC1 is clipped 0-127 (or 0-255).
         # We did clamp(0, 1) in PyTorch, which is 0-127 in int8 space.
@@ -58,7 +58,7 @@ def export_nnue(model_path, output_path):
         fc2_b = (model.fc2.bias.detach() * SCALE_QA * SCALE_QB).round().to(torch.int32)
         f.write(fc2_b.numpy().tobytes())
 
-        # 9. Out Weights (1, 32) -> int8
+        # 9. Out Weights (1, 128) -> int8
         print("Writing out.weight...")
         out_w = (model.out.weight.detach() * SCALE_QB).round().to(torch.int8)
         f.write(out_w.numpy().tobytes())

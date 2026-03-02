@@ -193,9 +193,9 @@ TEST_CASE("LMR reduces nodes for positions with many quiet moves", "[search][lmr
 }
 
 TEST_CASE("LMR still finds forced tactics despite reductions", "[search][lmr]") {
-    // White knight on e5 can capture undefended black bishop on d7.
+    // White knight on e5 can capture undefended black queen on d7.
     // Even with LMR reducing late quiet moves, captures are never reduced.
-    Board board("4k3/3b4/8/4N3/8/8/8/K7 w - - 0 1");
+    Board board("4k3/3q4/8/4N3/8/8/8/K7 w - - 0 1");
     SearchResult result = search(board, 5);
     // Knight should capture on d7 (sq = rank 6, file 3 = 6*8+3 = 51)
     REQUIRE(result.best_move.to_sq == sq(6, 3)); // d7

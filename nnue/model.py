@@ -6,12 +6,12 @@ class HalfKP(nn.Module):
     """
     Standard HalfKP NNUE Architecture for Chess.
     Input Feature size = 41024 (King Sq * Piece Type * Piece Sq)
-    Network: 
+    Network:
       FeatureTransformer(EmbeddingBag): 41024 -> 256
       Concatenation (us, them): 256 + 256 -> 512
-      FC1: 512 -> 32
-      FC2: 32 -> 32
-      Output: 32 -> 1
+      FC1: 512 -> 128
+      FC2: 128 -> 128
+      Output: 128 -> 1
     """
     def __init__(self):
         super(HalfKP, self).__init__()
@@ -19,10 +19,10 @@ class HalfKP(nn.Module):
         # 'sum' mode means it adds up the 256-d vectors for all active features (pieces)
         self.ft_weights = nn.EmbeddingBag(41024, 256, mode='sum')
         self.ft_bias = nn.Parameter(torch.zeros(256))
-        
-        self.fc1 = nn.Linear(512, 32)
-        self.fc2 = nn.Linear(32, 32)
-        self.out = nn.Linear(32, 1)
+
+        self.fc1 = nn.Linear(512, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.out = nn.Linear(128, 1)
         
         # Initialize weights
         nn.init.kaiming_normal_(self.ft_weights.weight)

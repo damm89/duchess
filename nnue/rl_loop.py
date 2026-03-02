@@ -115,7 +115,7 @@ def main():
         dataset_cmd = [
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "dataset.py"),
             "--out", jsonl_path,
-            "--games", str(args.games_per_iter * 2) # Grab recent games
+            "--games", str(args.games_per_iter * 2 + args.gauntlet_games) # Grab self-play + gauntlet games
         ]
         if not run_step("Dataset Extraction", dataset_cmd):
             sys.exit(1)

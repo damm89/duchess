@@ -17,8 +17,8 @@ namespace nnue {
 // HalfKP Dimensions
 constexpr int HALFKP_FEATURES = 41024;
 constexpr int LAYER1_SIZE = 256;
-constexpr int LAYER2_SIZE = 32;
-constexpr int LAYER3_SIZE = 32;
+constexpr int LAYER2_SIZE = 128;
+constexpr int LAYER3_SIZE = 128;
 
 // The accumulator stores the output of the first layer (Feature Transformer)
 // for both the White and Black perspectives.

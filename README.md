@@ -66,7 +66,8 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | **3.11** Countermove Heuristic | Track which move refutes the opponent's last move for better move ordering |
 | **3.12** Lazy SMP | Multi-threaded search with shared transposition table; helper threads at staggered depths |
 | **4.1** Syzygy Tablebases | Perfect endgame evaluation with up to 5 pieces via Fathom |
-| **4.2** NNUE Evaluation | Custom PyTorch pipeline yielding a SIMD-accelerated C++ network; hot-swappable via `NNUEFile` UCI option ([Guide](nnue/README.md)) |
+| **4.2** NNUE Evaluation | HalfKP architecture (41024→256→128→128→1) with SIMD-accelerated C++ inference; blended 50/50 with classical eval; hot-swappable via `NNUEFile` UCI option ([Guide](nnue/README.md)) |
+| **4.4** Classical Evaluation | Passed/doubled/isolated pawns, bishop pair, rook on open files, piece mobility, king safety (pawn shield), game phase tapering (middlegame/endgame PSTs) |
 | **4.3** Iterative RL Self-Play | `rl_loop.py` automates full training loop: self-play → gauntlet → dataset → train → export → repeat; supports Polyglot opening books, Syzygy tablebases |
 | **5.1** Board Rendering | QGraphicsView/QGraphicsScene with SVG pieces and smooth drag-and-drop |
 | **5.2** Analytical Visualizations | Live evaluation bar (centipawn/mate), principal-variation arrows, threat heatmaps |
@@ -78,7 +79,6 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 ### 🔧 Next up
 
 - Lichess API game importer (Phase 6.4)
-- Larger NNUE network architecture
 - Smart time management (allocate more time in complex positions)
 - Distillation training from Stockfish evaluations
 
@@ -92,9 +92,13 @@ The current goal is to surpass Queen (the benchmark opponent engine). Progress i
 
 All standard alpha-beta improvements are implemented: aspiration windows, check extensions, IID, singular extensions, null move pruning, LMR/PVS, reverse futility pruning, futility pruning, late move pruning, SEE-based ordering and capture pruning, countermove heuristic, killer moves, history heuristic.
 
+### Classical Evaluation (done)
+
+Rich handcrafted eval used standalone and blended 50/50 with NNUE: passed/doubled/isolated pawn detection, bishop pair bonus, rook on open/semi-open files, piece mobility (knights, bishops, rooks, queens), king safety via pawn shield, and game phase tapering between separate middlegame and endgame piece-square tables.
+
 ### NNUE Training (in progress)
 
-The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and optional gauntlet games against an external engine. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures.
+The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures.
 
 ### Remaining
 
@@ -102,10 +106,8 @@ The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot 
 |---|---|---|
 | High | More RL iterations (10-20+) | Network learns from more diverse positions |
 | High | Increase training depth to 6-8 | Cleaner evaluation signal |
-| Medium | Larger NNUE hidden layer | More complex pattern recognition |
 | Medium | Distillation from Stockfish | Bootstrap from strong evaluations |
 | Medium | Smart time management | Better use of clock in timed games |
-| Low | Endgame-specific knowledge | King safety, pawn structure patterns |
 
 ---
 
@@ -120,7 +122,7 @@ The full plan is organised into **three pillars** and **six phases**.
 | 1 | Foundation & move-gen integrity | UCI refactor, perft suite |
 | 2 | Core search upgrades | Transposition tables, quiescence search, move ordering |
 | 3 | Advanced heuristics & scalability | NMP, LMR/PVS, aspiration windows, SEE, futility pruning, singular extensions, Lazy SMP |
-| 4 | Modern evaluation & endgames | Syzygy tablebases, NNUE training pipeline, SIMD inference, iterative RL |
+| 4 | Modern evaluation & endgames | Syzygy tablebases, classical eval (pawn structure, mobility, king safety, phase tapering), NNUE training pipeline (HalfKP 256→128→128→1), SIMD inference, NNUE+classical blend, iterative RL |
 
 ### Pillar 2 — The Interface (Professional GUI)
 

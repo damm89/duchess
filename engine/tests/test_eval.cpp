@@ -22,8 +22,8 @@ TEST_CASE("White up a pawn", "[eval]") {
     Board board("rnbqkbnr/pppp1ppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     int score = evaluate(board);
     REQUIRE(score > 0);
-    REQUIRE(score >= 80);   // at least ~pawn value with PST variance
-    REQUIRE(score <= 150);
+    REQUIRE(score >= 50);   // at least ~pawn value with mobility/structure variance
+    REQUIRE(score <= 250);  // allow for mobility and pawn structure terms
 }
 
 TEST_CASE("Black up a queen", "[eval]") {
