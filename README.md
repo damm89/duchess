@@ -16,9 +16,10 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 ┌────────────────────▼────────────────────────────┐
 │  C++ Engine  (engine/)                          │
 │  Board repr · Move gen · Alpha-beta search      │
-│  Zobrist hashing · Transposition tables         │
+│  Zobrist hashing · TT · SEE · Aspiration windows│
+│  LMR/PVS · NMP · Futility · Singular extensions │
 │  Polyglot opening book · NNUE + SIMD eval       │
-│  Syzygy tablebase probing (Fathom)              │
+│  Syzygy tablebase probing (Fathom) · Lazy SMP   │
 └─────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────┐
@@ -54,10 +55,19 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | **2.3** Move Ordering | MVV-LVA for captures, killer moves, history heuristic, TT move priority |
 | **3.1** Null Move Pruning | Skips branches where opponent's free move still loses; depth-adaptive R |
 | **3.2** LMR & PVS | Late move reductions for quiet moves; principal variation search with null/full window re-search |
-| **3.3** Lazy SMP | Multi-threaded search with shared transposition table; helper threads at staggered depths |
+| **3.3** Aspiration Windows | Narrow search window around previous depth's score; exponential widening on fail |
+| **3.4** Check Extensions | Extend search by 1 ply when in check to avoid horizon effect |
+| **3.5** Internal Iterative Deepening | Shallow search to find a TT move when none exists (depth >= 6) |
+| **3.6** Singular Extensions | Verify TT move is uniquely best via exclusion search; extend if singular |
+| **3.7** Reverse Futility Pruning | Return early when static eval is far above beta at shallow depth |
+| **3.8** Futility Pruning | Skip quiet moves at shallow depth when static eval + margin can't reach alpha |
+| **3.9** Late Move Pruning | Skip late quiet moves entirely at very shallow depths |
+| **3.10** SEE (Static Exchange Evaluation) | Accurate capture sequence analysis for move ordering and pruning losing captures |
+| **3.11** Countermove Heuristic | Track which move refutes the opponent's last move for better move ordering |
+| **3.12** Lazy SMP | Multi-threaded search with shared transposition table; helper threads at staggered depths |
 | **4.1** Syzygy Tablebases | Perfect endgame evaluation with up to 5 pieces via Fathom |
 | **4.2** NNUE Evaluation | Custom PyTorch pipeline yielding a SIMD-accelerated C++ network; hot-swappable via `NNUEFile` UCI option ([Guide](nnue/README.md)) |
-| **4.3** Iterative RL Self-Play | `rl_loop.py` automates full AlphaZero-style training loop: self-play → dataset → train → export → repeat |
+| **4.3** Iterative RL Self-Play | `rl_loop.py` automates full training loop: self-play → gauntlet → dataset → train → export → repeat; supports Polyglot opening books, Syzygy tablebases |
 | **5.1** Board Rendering | QGraphicsView/QGraphicsScene with SVG pieces and smooth drag-and-drop |
 | **5.2** Analytical Visualizations | Live evaluation bar (centipawn/mate), principal-variation arrows, threat heatmaps |
 | **5.3** Multi-Engine Analysis | Load external UCI engines for side-by-side comparison in analysis panel |
@@ -68,6 +78,34 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 ### 🔧 Next up
 
 - Lichess API game importer (Phase 6.4)
+- Larger NNUE network architecture
+- Smart time management (allocate more time in complex positions)
+- Distillation training from Stockfish evaluations
+
+---
+
+## Roadmap to beating Queen
+
+The current goal is to surpass Queen (the benchmark opponent engine). Progress is tracked via gauntlet matches.
+
+### Search (done)
+
+All standard alpha-beta improvements are implemented: aspiration windows, check extensions, IID, singular extensions, null move pruning, LMR/PVS, reverse futility pruning, futility pruning, late move pruning, SEE-based ordering and capture pruning, countermove heuristic, killer moves, history heuristic.
+
+### NNUE Training (in progress)
+
+The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and optional gauntlet games against an external engine. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures.
+
+### Remaining
+
+| Priority | Feature | Expected impact |
+|---|---|---|
+| High | More RL iterations (10-20+) | Network learns from more diverse positions |
+| High | Increase training depth to 6-8 | Cleaner evaluation signal |
+| Medium | Larger NNUE hidden layer | More complex pattern recognition |
+| Medium | Distillation from Stockfish | Bootstrap from strong evaluations |
+| Medium | Smart time management | Better use of clock in timed games |
+| Low | Endgame-specific knowledge | King safety, pawn structure patterns |
 
 ---
 
@@ -81,8 +119,8 @@ The full plan is organised into **three pillars** and **six phases**.
 |---|---|---|
 | 1 | Foundation & move-gen integrity | UCI refactor, perft suite |
 | 2 | Core search upgrades | Transposition tables, quiescence search, move ordering |
-| 3 | Advanced heuristics & scalability | Null-move pruning, LMR / PVS, Lazy SMP multi-threading |
-| 4 | Modern evaluation & endgames | Syzygy tablebases, NNUE training pipeline, SIMD inference |
+| 3 | Advanced heuristics & scalability | NMP, LMR/PVS, aspiration windows, SEE, futility pruning, singular extensions, Lazy SMP |
+| 4 | Modern evaluation & endgames | Syzygy tablebases, NNUE training pipeline, SIMD inference, iterative RL |
 
 ### Pillar 2 — The Interface (Professional GUI)
 

@@ -11,6 +11,7 @@ from typing import Optional
 import chess
 import chess.engine
 import chess.pgn
+import chess.polyglot
 from sqlalchemy.orm import Session
 from tqdm import tqdm
 
@@ -24,9 +25,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None) -> Optional[dict]:
+def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None, book_path: Optional[str] = None) -> Optional[dict]:
     """Play a single game of the engine against itself from a randomized start.
-    
+
     Returns a dict formatted for the MasterGame database model.
     """
     try:
@@ -43,14 +44,25 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         board = chess.Board()
         game = chess.pgn.Game()
         
-        # 1. Randomized Opening phase
-        for _ in range(random_plies):
-            if board.is_game_over():
-                break
-            # Pick a completely random legal move
-            legal_moves = list(board.legal_moves)
-            random_move = random.choice(legal_moves)
-            board.push(random_move)
+        # 1. Opening phase — use book moves if available, else random
+        if book_path:
+            with chess.polyglot.open_reader(book_path) as reader:
+                for _ in range(random_plies):
+                    if board.is_game_over():
+                        break
+                    entries = list(reader.find_all(board))
+                    if entries:
+                        # Weighted random selection by Polyglot weight
+                        moves = [e.move for e in entries]
+                        weights = [e.weight for e in entries]
+                        board.push(random.choices(moves, weights=weights, k=1)[0])
+                    else:
+                        break  # out of book
+        else:
+            for _ in range(random_plies):
+                if board.is_game_over():
+                    break
+                board.push(random.choice(list(board.legal_moves)))
 
         # Start standard recording from the randomized board state
         game.setup(board)
@@ -115,7 +127,7 @@ def worker_init():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None):
+def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
     logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
     logger.info(f"Each game will begin with {random_plies} random plies.")
 
@@ -130,7 +142,7 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
         with multiprocessing.Pool(processes=threads, initializer=worker_init) as pool:
             # We don't want to load them all into memory at once if num_games is massive,
             # so we use imap_unordered to process and save them in real-time.
-            jobs = (pool.apply_async(play_game, (engine_path, depth, random_plies, nnue_path, syzygy_path)) for _ in range(num_games))
+            jobs = (pool.apply_async(play_game, (engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)) for _ in range(num_games))
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
                 for job in jobs:
@@ -187,11 +199,12 @@ if __name__ == "__main__":
     parser.add_argument("--random-plies", type=int, default=8, help="Number of completely random initial half-moves to enforce opening diversity.")
     parser.add_argument("--nnue", type=str, default=None, help="Path to absolute starting network architecture if bootstrapping iteratively.")
     parser.add_argument("--syzygy", type=str, default=None, help="Optional path to Syzygy tablebase directory for perfect endgame play.")
-    
+    parser.add_argument("--book", type=str, default=None, help="Path to a Polyglot opening book (.bin) for opening diversity.")
+
     args = parser.parse_args()
     
     if not os.path.exists(args.engine):
         logger.error(f"Engine binary not found at {args.engine}. Please build it first.")
         sys.exit(1)
         
-    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy)
+    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy, args.book)

@@ -54,6 +54,7 @@ def main():
     parser.add_argument("--syzygy", type=str, default="", help="Optional: Path to Syzygy tablebase directory for perfect endgame play during self-play.")
     parser.add_argument("--gauntlet-engine", type=str, default="", help="Optional: Path to an opponent UCI engine. When set, plays extra games vs this engine before each training step.")
     parser.add_argument("--gauntlet-games", type=int, default=50, help="Number of gauntlet games per iteration (used with --gauntlet-engine).")
+    parser.add_argument("--book", type=str, default="", help="Path to a Polyglot opening book (.bin) for opening diversity in self-play and gauntlet.")
     
     args = parser.parse_args()
     
@@ -84,6 +85,9 @@ def main():
         if args.syzygy and os.path.isdir(args.syzygy):
             selfplay_cmd.extend(["--syzygy", args.syzygy])
             logger.info(f"Using Syzygy tablebases from: {args.syzygy}")
+        if args.book and os.path.exists(args.book):
+            selfplay_cmd.extend(["--book", args.book])
+            logger.info(f"Using opening book: {args.book}")
             
         if not run_step("Self-Play Generation", selfplay_cmd):
             sys.exit(1)
@@ -101,6 +105,8 @@ def main():
                 gauntlet_cmd.extend(["--nnue", current_nnue])
             if args.syzygy and os.path.isdir(args.syzygy):
                 gauntlet_cmd.extend(["--syzygy", args.syzygy])
+            if args.book and os.path.exists(args.book):
+                gauntlet_cmd.extend(["--book", args.book])
             if not run_step(f"Gauntlet vs {os.path.basename(args.gauntlet_engine)}", gauntlet_cmd):
                 logger.warning("Gauntlet step failed — continuing without those games.")
             
