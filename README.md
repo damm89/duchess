@@ -98,7 +98,7 @@ Rich handcrafted eval used standalone and blended 50/50 with NNUE: passed/double
 
 ### NNUE Training (in progress)
 
-The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures.
+The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures. Training resumes from the previous iteration's checkpoint so each network builds on what came before. NNUE weights, PyTorch models, and datasets are version-controlled via Git LFS for seamless syncing across machines.
 
 ### Remaining
 
@@ -144,23 +144,40 @@ The full plan is organised into **three pillars** and **six phases**.
 
 - **Python 3.10+** with PyQt6
 - **CMake 3.16+** and a C++17 compiler
+- **Git LFS** (for NNUE weights and training data)
 - PostgreSQL (optional, for game database features)
 
-### Build the engine
+### Quick setup (Ubuntu)
 
 ```bash
+git clone https://github.com/damm89/duchess.git
+cd duchess
+bash setup_ubuntu.sh
+```
+
+This creates a `py-duchess` virtualenv, installs all dependencies, sets up PostgreSQL, and builds the engine.
+
+### Manual setup
+
+```bash
+# Create virtualenv
+python3 -m venv py-duchess
+source py-duchess/bin/activate
+pip install -r requirements.txt
+
+# Build the engine
 cd engine
 mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
 ```
 
-The resulting `duchess_engine` binary speaks UCI.
+The resulting `duchess_cli` binary speaks UCI.
 
 ### Run the GUI
 
 ```bash
-pip install -r requirements.txt
+source py-duchess/bin/activate
 python -m duchess.main
 ```
 

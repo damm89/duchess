@@ -4,6 +4,9 @@ build_pyinstaller/
 engine/build/
 AppDir/
 
+# Python virtualenv
+py-duchess/
+
 # Syzygy
 Syzygy/
 

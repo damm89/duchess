@@ -7,3 +7,5 @@ alembic
 python-dotenv
 requests
 tqdm
+python-chess
+torch

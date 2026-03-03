@@ -14,7 +14,7 @@ sudo apt-get install -y \
     build-essential cmake g++ \
     python3 python3-pip python3-venv \
     postgresql postgresql-contrib libpq-dev \
-    git
+    git git-lfs
 
 # 2. PostgreSQL database
 echo "[2/7] Setting up PostgreSQL database..."
@@ -23,9 +23,12 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'duchess_db
 # Grant access to current user
 sudo -u postgres psql -c "CREATE USER $USER WITH SUPERUSER;" 2>/dev/null || true
 
-# 3. Python dependencies
-echo "[3/7] Installing Python dependencies..."
-pip3 install --user -r requirements.txt
+# 3. Python virtual environment
+echo "[3/7] Creating Python virtualenv 'py-duchess' and installing dependencies..."
+python3 -m venv py-duchess
+source py-duchess/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
 
 # 4. Environment file
 echo "[4/7] Creating .env file..."
@@ -38,7 +41,7 @@ fi
 
 # 5. Database migrations
 echo "[5/7] Running database migrations..."
-python3 -m alembic upgrade head
+python -m alembic upgrade head
 
 # 6. Build Duchess engine
 echo "[6/7] Building Duchess engine..."
@@ -63,11 +66,18 @@ else
     echo "Copy it from your Mac: scp -r user@mac:~/Desktop/Queen405x64 ~/"
 fi
 
+# Initialize Git LFS
+git lfs install
+
 echo ""
 echo "=== Setup Complete ==="
 echo ""
+echo "Always activate the venv before running:"
+echo "  source py-duchess/bin/activate"
+echo ""
 echo "To start the RL training loop:"
-echo "  python3 nnue/rl_loop.py \\"
+echo "  source py-duchess/bin/activate"
+echo "  python nnue/rl_loop.py \\"
 echo "    --iterations 35 \\"
 echo "    --games-per-iter 5000 \\"
 echo "    --threads $(nproc) \\"
