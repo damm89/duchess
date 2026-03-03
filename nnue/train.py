@@ -1,4 +1,5 @@
 import json
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -88,16 +89,19 @@ def collate_fn(batch):
         torch.tensor(targets, dtype=torch.float32).unsqueeze(1)
     )
 
-def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epochs=10, batch_size=256, lr=1e-3):
+def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epochs=10, batch_size=256, lr=1e-3, resume_from=None):
     device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
-    
+
     dataset = NNUEDataset(data_file)
     # If the dataset is too small, reduce the batch size
     actual_batch = min(batch_size, max(1, len(dataset)))
     dataloader = DataLoader(dataset, batch_size=actual_batch, shuffle=True, collate_fn=collate_fn)
-    
+
     model = HalfKP().to(device)
+    if resume_from and os.path.exists(resume_from):
+        print(f"Resuming from checkpoint: {resume_from}")
+        model.load_state_dict(torch.load(resume_from, map_location=device, weights_only=True))
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
@@ -135,6 +139,7 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, default="nnue/dataset.jsonl", help="Input JSONL dataset file")
     parser.add_argument("--out", type=str, default="nnue/duchess_nnue.pt", help="Output PyTorch model file")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    
+    parser.add_argument("--resume", type=str, default=None, help="Path to a previous .pt checkpoint to resume training from.")
+
     args = parser.parse_args()
-    train(data_file=args.data, out_file=args.out, epochs=args.epochs)
+    train(data_file=args.data, out_file=args.out, epochs=args.epochs, resume_from=args.resume)

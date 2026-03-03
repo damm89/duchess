@@ -133,14 +133,17 @@ def main():
         if not run_step("Dataset Extraction", dataset_cmd):
             sys.exit(1)
             
-        # 3. Train Model
+        # 3. Train Model (resume from previous iteration's checkpoint if available)
         pt_path = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i}.pt")
+        prev_pt = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i - 1}.pt")
         train_cmd = [
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "train.py"),
             "--data", jsonl_path,
             "--out", pt_path,
             "--epochs", str(args.epochs_per_iter)
         ]
+        if os.path.exists(prev_pt):
+            train_cmd.extend(["--resume", prev_pt])
         if not run_step("PyTorch Training", train_cmd):
             sys.exit(1)
             
