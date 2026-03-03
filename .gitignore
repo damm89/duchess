@@ -40,6 +40,4 @@ compacted.txt
 # Agent instructions (not part of the app)
 agent_instructions/
 **/engine_phase1_instructions.md
-nnue/*.jsonl
-nnue/*.pt
-nnue/*.bin
+# NNUE weights, models, and datasets are tracked via Git LFS
