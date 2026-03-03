@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--games-per-iter", type=int, default=5000, help="Number of self-play games to generate per iteration.")
     parser.add_argument("--threads", type=int, default=10, help="Number of engine threads for self-play.")
     parser.add_argument("--start-nnue", type=str, default="", help="Optional: Path to an existing .bin network to bootstrap from.")
+    parser.add_argument("--start-iter", type=int, default=1, help="Starting iteration number (to resume a previous run).")
     parser.add_argument("--epochs-per-iter", type=int, default=20, help="Number of training epochs per iteration.")
     parser.add_argument("--syzygy", type=str, default="", help="Optional: Path to Syzygy tablebase directory for perfect endgame play during self-play.")
     parser.add_argument("--gauntlet-engine", type=str, default="", help="Optional: Path to an opponent UCI engine. When set, plays extra games vs this engine before each training step.")
@@ -60,12 +61,24 @@ def main():
     
     current_nnue = args.start_nnue
     engine_path = str(PROJECT_ROOT / "engine" / "build" / "duchess_cli")
-    
+
     if not os.path.exists(engine_path):
         logger.error(f"Engine not found at {engine_path}. Please build the C++ engine first.")
         sys.exit(1)
-        
-    for i in range(1, args.iterations + 1):
+
+    # Auto-detect resume: if --start-iter not set, check for existing iteration files
+    start_iter = args.start_iter
+    if start_iter == 1 and not args.start_nnue:
+        for check_iter in range(100, 0, -1):
+            bin_file = PROJECT_ROOT / "nnue" / f"duchess_iter_{check_iter}.bin"
+            pt_file = PROJECT_ROOT / "nnue" / f"duchess_iter_{check_iter}.pt"
+            if bin_file.exists() and pt_file.exists():
+                start_iter = check_iter + 1
+                current_nnue = str(PROJECT_ROOT / "nnue" / "duchess.bin")
+                logger.info(f"Found existing iteration {check_iter} — resuming from iteration {start_iter}")
+                break
+
+    for i in range(start_iter, args.iterations + 1):
         logger.info(f"\n=========================================================")
         logger.info(f"               STARTING ITERATION {i}/{args.iterations}")
         logger.info(f"=========================================================\n")
