@@ -1,4 +1,4 @@
-PyQt6
+PyQt6==6.4.0
 pytest
 pytest-qt
 sqlalchemy
@@ -9,3 +9,5 @@ requests
 tqdm
 python-chess
 torch
+pybind11
+numpy

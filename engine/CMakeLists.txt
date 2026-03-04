@@ -7,6 +7,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+find_package(Threads REQUIRED)
+
 option(DUCHESS_NATIVE_ARCH "Use -march=native for local CPU optimizations" ON)
 if (DUCHESS_NATIVE_ARCH AND NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
@@ -38,7 +40,7 @@ endif()
 
 # --- UCI standalone executable ---
 add_executable(duchess_cli src/main.cpp src/uci.cpp)
-target_link_libraries(duchess_cli PRIVATE duchess_engine_lib)
+target_link_libraries(duchess_cli PRIVATE duchess_engine_lib Threads::Threads)
 
 # --- pybind11 Python module (optional — skipped in CI builds) ---
 option(DUCHESS_BUILD_PYTHON "Build Python bindings via pybind11" ON)

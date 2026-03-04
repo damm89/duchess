@@ -12,9 +12,13 @@ echo "[1/7] Installing system packages..."
 sudo apt-get update
 sudo apt-get install -y \
     build-essential cmake g++ \
-    python3 python3-pip python3-venv \
+    libssl-dev zlib1g-dev libreadline-dev libsqlite3-dev libbz2-dev libffi-dev liblzma-dev \
+    python3-pip \
     postgresql postgresql-contrib libpq-dev \
     git git-lfs
+
+# Initialize git submodules (fathom Syzygy probe library)
+git submodule update --init --recursive
 
 # 2. PostgreSQL database
 echo "[2/7] Setting up PostgreSQL database..."
@@ -25,7 +29,18 @@ sudo -u postgres psql -c "CREATE USER $USER WITH SUPERUSER;" 2>/dev/null || true
 
 # 3. Python virtual environment
 echo "[3/7] Creating Python virtualenv 'py-duchess' and installing dependencies..."
-python3 -m venv py-duchess
+export PYENV_ROOT="/home/daniel/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+if ! pyenv versions | grep -q '3.10.14'; then
+    echo "Installing Python 3.10.14 via pyenv..."
+    pyenv install 3.10.14
+fi
+pyenv local 3.10.14
+
+# Use the full pyenv python path explicitly just in case
+$PYENV_ROOT/versions/3.10.14/bin/python -m venv py-duchess
 source py-duchess/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -33,7 +48,7 @@ pip install -r requirements.txt
 # 4. Environment file
 echo "[4/7] Creating .env file..."
 if [ ! -f .env ]; then
-    echo "DATABASE_URL=postgresql://localhost/duchess_db" > .env
+    echo "DATABASE_URL=postgresql:///duchess_db" > .env
     echo "Created .env"
 else
     echo ".env already exists, skipping"
@@ -47,7 +62,9 @@ python -m alembic upgrade head
 echo "[6/7] Building Duchess engine..."
 mkdir -p engine/build
 cd engine/build
-cmake ..
+cmake .. \
+    -DPython3_EXECUTABLE="$(which python)" \
+    -DPYTHON_EXECUTABLE="$(which python)"
 make -j$(nproc)
 echo "Running tests..."
 ctest --output-on-failure
