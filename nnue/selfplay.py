@@ -7,6 +7,7 @@ import sys
 import time
 import threading
 import resource
+import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
@@ -43,6 +44,44 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 thread_local = threading.local()
+game_queue = queue.Queue()
+
+def database_writer_thread(total_games):
+    """Background thread that safely batches games into Postgres, preventing 126-thread DB lockups."""
+    db: Session = WorkerSessionLocal()
+    written = 0
+    batch = []
+    
+    while written < total_games:
+        try:
+            game = game_queue.get(timeout=10.0)
+            if game is None:  # Poison pill
+                break
+            batch.append(game)
+            written += 1
+            
+            # Commit in batches of 50 or when finished
+            if len(batch) >= 50 or written == total_games:
+                try:
+                    db.bulk_insert_mappings(MasterGame, batch)
+                    db.commit()
+                    batch.clear()
+                except Exception as e:
+                    logger.error(f"DB Batch Insert Failed: {e}")
+                    db.rollback()
+            
+            game_queue.task_done()
+        except queue.Empty:
+            continue
+            
+    if batch:
+        try:
+            db.bulk_insert_mappings(MasterGame, batch)
+            db.commit()
+        except:
+            db.rollback()
+            
+    db.close()
 
 def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Optional[str]):
     """Returns a persisted engine instance for the current thread."""
@@ -141,20 +180,8 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
             "training_use": True
         }
         
-        # 4. Each worker inserts its own game into the DB
-        # This prevents the inter-process pipe from choking on massive strings!
-        db: Session = WorkerSessionLocal()
-        try:
-            db.execute(
-                MasterGame.__table__.insert().values(game_data)
-            )
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Worker failed to insert game to DB: {e}")
-        finally:
-            db.close()
-            
+        # 4. Push to background writer thread to avoid Postgres deadlock
+        game_queue.put(game_data)
         return True
 
     except Exception as e:
@@ -180,6 +207,10 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
     logger.info(f"Each game will begin with {random_plies} random plies.")
 
     start_time = time.time()
+    
+    # Start the DB writer daemon
+    db_thread = threading.Thread(target=database_writer_thread, args=(num_games,), daemon=True)
+    db_thread.start()
     
     completed_games = 0
 
@@ -213,7 +244,11 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
 
     except KeyboardInterrupt:
         logger.warning(f"Self-play interrupted by user! Stopping {threads} workers...")
+        game_queue.put(None) # Tell writer to stop
         sys.exit(1)
+        
+    # Wait for remaining DB writes
+    db_thread.join(timeout=15.0)
 
     elapsed = time.time() - start_time
     logger.info(f"Self-play complete! Generated {completed_games} total games in {elapsed:.1f}s ({(completed_games/elapsed if elapsed > 0 else 0):.2f} games/sec)")
