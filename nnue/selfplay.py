@@ -11,12 +11,13 @@ import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-# Try to bump file descriptor limits to max allowed to prevent IO starvation
+# Force file descriptor limits up to handle 126 C++ processes + Syzygy tables
 try:
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
-except Exception:
-    pass
+    target_limit = min(100000, hard)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (target_limit, hard))
+except Exception as e:
+    print(f"WARNING: Failed to increase RLIMIT_NOFILE: {e}")
 
 import chess
 import chess.engine
@@ -102,9 +103,12 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
 
     Returns True on DB insert success.
     """
+    pid = os.getpid()
     try:
+        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Thread {threading.get_ident()} Starting engine {engine_path}...\n")
         engine = get_local_engine(engine_path, nnue_path, syzygy_path)
     except Exception as e:
+        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Thread {threading.get_ident()} CRASHED GETTING ENGINE: {e}\n")
         logger.error(f"Worker failed to start engine: {e}")
         return None
 
