@@ -10,6 +10,8 @@ Automates the full pipeline:
 4. Export (converts .pt to .bin)
 5. Repeat (loads new .bin into self-play)
 """
+from __future__ import annotations
+
 import argparse
 import logging
 import os
@@ -74,7 +76,7 @@ def main():
             pt_file = PROJECT_ROOT / "nnue" / f"duchess_iter_{check_iter}.pt"
             if bin_file.exists() and pt_file.exists():
                 start_iter = check_iter + 1
-                current_nnue = str(PROJECT_ROOT / "nnue" / "duchess.bin")
+                current_nnue = str(bin_file)
                 logger.info(f"Found existing iteration {check_iter} — resuming from iteration {start_iter}")
                 break
 
@@ -130,6 +132,8 @@ def main():
             "--out", jsonl_path,
             "--games", str(args.games_per_iter * 2 + args.gauntlet_games) # Grab self-play + gauntlet games
         ]
+        if current_nnue and os.path.exists(current_nnue):
+            dataset_cmd.extend(["--nnue", current_nnue])
         if not run_step("Dataset Extraction", dataset_cmd):
             sys.exit(1)
             

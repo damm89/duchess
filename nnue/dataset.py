@@ -19,7 +19,7 @@ from duchess.models import MasterGame
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: int = 4):
+def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: int = 4, nnue_path: str = None):
     logging.info(f"Connecting to database and fetching up to {max_games} games...")
     db: Session = SessionLocal()
     try:
@@ -38,6 +38,8 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
 
     def start_engine():
         eng = chess.engine.SimpleEngine.popen_uci(engine_path)
+        if nnue_path and os.path.exists(nnue_path):
+            eng.configure({"NNUEFile": nnue_path})
         return eng
 
     try:
@@ -115,6 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--games", type=int, default=1000, help="Maximum number of games to parse.")
     parser.add_argument("--engine", type=str, default="engine/build/duchess_cli", help="Path to UCI engine.")
     parser.add_argument("--depth", type=int, default=4, help="Search depth for position evaluation.")
+    parser.add_argument("--nnue", type=str, default=None, help="Path to NNUE file for evaluation.")
     
     args = parser.parse_args()
-    generate_dataset(args.out, args.games, args.engine, args.depth)
+    generate_dataset(args.out, args.games, args.engine, args.depth, args.nnue)
