@@ -18,8 +18,17 @@ from tqdm import tqdm
 # Add project root to path so we can import duchess modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from duchess.database import SessionLocal
 from duchess.models import MasterGame
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+import os
+from duchess.database import DATABASE_URL
+
+# Create a custom engine for workers with NO connection pooling (NullPool)
+# This prevents 126 workers from exhausting PostgreSQL's 100 max_connections
+worker_engine = create_engine(DATABASE_URL, poolclass=NullPool)
+WorkerSessionLocal = sessionmaker(bind=worker_engine)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -115,7 +124,7 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         
         # 4. Each worker inserts its own game into the DB
         # This prevents the inter-process pipe from choking on massive strings!
-        db: Session = SessionLocal()
+        db: Session = WorkerSessionLocal()
         try:
             db.execute(
                 MasterGame.__table__.insert().values(game_data)
