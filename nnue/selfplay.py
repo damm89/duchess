@@ -164,12 +164,16 @@ import random
 import time
 
 def play_game_wrapper(args):
-    """Unpacks arguments for pool.imap_unordered and staggers startup IO."""
+    """Unpacks arguments for pool.imap_unordered and staggers startup IO safely."""
     pid = os.getpid()
     with open("/workspace/worker_crash.log", "a") as f:
         f.write(f"[PID {pid}] Wrapper started.\n")
     try:
-        time.sleep(random.uniform(0, 2.5))
+        # Use PID instead of random module, which deadlocks on massive Linux forks
+        stagger = (pid % 50) * 0.05
+        time.sleep(stagger)
+        with open("/workspace/worker_crash.log", "a") as f:
+            f.write(f"[PID {pid}] Sleep finished. Calling play_game...\n")
         return play_game(*args)
     except Exception as e:
         with open("/workspace/worker_crash.log", "a") as f:
