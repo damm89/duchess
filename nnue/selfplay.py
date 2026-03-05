@@ -2,6 +2,7 @@ import argparse
 import datetime
 import logging
 import os
+import random
 import sys
 import time
 import threading
@@ -46,6 +47,9 @@ thread_local = threading.local()
 def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Optional[str]):
     """Returns a persisted engine instance for the current thread."""
     if not hasattr(thread_local, "engine"):
+        # Stagger initialization over 10 seconds to prevent 126 engines from 
+        # simultaneously crashing the RunPod Network Drive while loading Syzygy
+        time.sleep(random.uniform(0, 10.0))
         engine = chess.engine.SimpleEngine.popen_uci(engine_path)
         if nnue_path:
             engine.configure({"NNUEFile": nnue_path})
