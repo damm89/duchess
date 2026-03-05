@@ -100,7 +100,7 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
         pgn_string = game.accept(exporter)
         
-        return {
+        game_data = {
             "event": game.headers.get("Event"),
             "date": game.headers.get("Date"),
             "white": game.headers.get("White"),
@@ -112,6 +112,22 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
             "move_text": pgn_string,
             "training_use": True
         }
+        
+        # 4. Each worker inserts its own game into the DB
+        # This prevents the inter-process pipe from choking on massive strings!
+        db: Session = SessionLocal()
+        try:
+            db.execute(
+                MasterGame.__table__.insert().values(game_data)
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Worker failed to insert game to DB: {e}")
+        finally:
+            db.close()
+            
+        return True
 
     except Exception as e:
         try:
@@ -139,11 +155,8 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
     logger.info(f"Each game will begin with {random_plies} random plies.")
 
     start_time = time.time()
-    db: Session = SessionLocal()
     
     completed_games = 0
-    batch_size = 100
-    batch = []
 
     try:
         with multiprocessing.Pool(processes=threads, initializer=worker_init) as pool:
@@ -166,34 +179,15 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
                         pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
                         
                     if result:
-                        batch.append(result)
                         completed_games += 1
-                        
-                        if len(batch) >= batch_size:
-                            try:
-                                db.bulk_insert_mappings(MasterGame, batch)
-                                db.commit()
-                                batch.clear()
-                            except Exception as e:
-                                db.rollback()
-                                pbar.write(f"Failed to insert batch: {e}")
                 
-                # Insert final remainder
-                if batch:
-                    try:
-                        db.bulk_insert_mappings(MasterGame, batch)
-                        db.commit()
-                    except Exception as e:
-                        db.rollback()
-                        pbar.write(f"Failed to insert final batch: {e}")
-                    
     except KeyboardInterrupt:
-        logger.warning("\nCaught Ctrl+C! Killing workers...")
+        logger.warning(f"Self-play interrupted by user! Stopping {threads} workers...")
         pool.terminate()
         pool.join()
         sys.exit(1)
     finally:
-        db.close()
+        pass # db.close() is no longer needed here as sessions are managed per worker
 
     elapsed = time.time() - start_time
     logger.info(f"Self-play complete! Generated {completed_games} total games in {elapsed:.1f}s ({(completed_games/elapsed if elapsed > 0 else 0):.2f} games/sec)")
