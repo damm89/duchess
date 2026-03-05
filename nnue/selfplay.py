@@ -140,13 +140,15 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
 
     try:
         with multiprocessing.Pool(processes=threads, initializer=worker_init) as pool:
-            # We don't want to load them all into memory at once if num_games is massive,
-            # so we use imap_unordered to process and save them in real-time.
-            jobs = (pool.apply_async(play_game, (engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)) for _ in range(num_games))
+            # We use imap_unordered so that short games don't get bottlenecked waiting behind a single long game.
+            # This is critical for scaling across 100+ cores!
+            jobs = pool.imap_unordered(
+                play_game_wrapper,
+                [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)] * num_games
+            )
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
-                for job in jobs:
-                    result = job.get()
+                for result in jobs:
                     pbar.update(1)
                     
                     rate = pbar.format_dict.get("rate")
