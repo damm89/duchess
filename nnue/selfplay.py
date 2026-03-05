@@ -223,28 +223,23 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
             # We use ThreadPoolExecutor because multiprocessing forks permanently deadlock on 126-core RunPod containers!
             # Since the C++ engine does the heavy lifting, the Python GIL doesn't bottleneck us here.
             
-            jobs = [
-                executor.submit(play_game_wrapper, (engine_path, depth, random_plies, nnue_path, syzygy_path, book_path))
-                for _ in range(num_games)
-            ]
+            # Use a generator map instead of submit() to prevent queueing 5000 heavy futures into RAM at once!
+            job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)] * num_games
+            results = executor.map(play_game_wrapper, job_args)
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
-                for future in as_completed(jobs):
-                    try:
-                        result = future.result()
-                        pbar.update(1)
+                for result in results:
+                    pbar.update(1)
+                    
+                    rate = pbar.format_dict.get("rate")
+                    if rate:
+                        avg_time = 1.0 / rate
+                        eta_seconds = (pbar.total - pbar.n) / rate
+                        eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
+                        pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
                         
-                        rate = pbar.format_dict.get("rate")
-                        if rate:
-                            avg_time = 1.0 / rate
-                            eta_seconds = (pbar.total - pbar.n) / rate
-                            eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
-                            pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
-                            
-                        if result:
-                            completed_games += 1
-                    except Exception as e:
-                        logger.error(f"Thread task crashed: {e}")
+                    if result:
+                        completed_games += 1
 
     except KeyboardInterrupt:
         logger.warning(f"Self-play interrupted by user! Stopping {threads} workers...")
