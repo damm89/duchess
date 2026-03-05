@@ -4,8 +4,17 @@ import logging
 import os
 import sys
 import time
+import threading
+import resource
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
+
+# Try to bump file descriptor limits to max allowed to prevent IO starvation
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+except Exception:
+    pass
 
 import chess
 import chess.engine
@@ -32,24 +41,27 @@ WorkerSessionLocal = sessionmaker(bind=worker_engine)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+thread_local = threading.local()
+
+def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Optional[str]):
+    """Returns a persisted engine instance for the current thread."""
+    if not hasattr(thread_local, "engine"):
+        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+        if nnue_path:
+            engine.configure({"NNUEFile": nnue_path})
+        if syzygy_path:
+            engine.configure({"SyzygyPath": syzygy_path})
+        thread_local.engine = engine
+    return thread_local.engine
 
 def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None, book_path: Optional[str] = None) -> Optional[bool]:
     """Play a single game of the engine against itself from a randomized start.
 
     Returns True on DB insert success.
     """
-    pid = os.getpid()
     try:
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Starting engine {engine_path}...\n")
-        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Engine started. Configuring...\n")
-        if nnue_path:
-            engine.configure({"NNUEFile": nnue_path})
-        if syzygy_path:
-            engine.configure({"SyzygyPath": syzygy_path})
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Configuration done.\n")
+        engine = get_local_engine(engine_path, nnue_path, syzygy_path)
     except Exception as e:
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Failed to start engine: {e}\n")
         logger.error(f"Worker failed to start engine: {e}")
         return None
 
@@ -108,7 +120,6 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
 
         # 3. Game Conclusion
         game.headers["Result"] = board.result()
-        engine.quit()
 
         exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
         pgn_string = game.accept(exporter)
@@ -127,7 +138,6 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         }
         
         # 4. Each worker inserts its own game into the DB
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Game finished. Inserting to DB...\n")
         # This prevents the inter-process pipe from choking on massive strings!
         db: Session = WorkerSessionLocal()
         try:
@@ -135,10 +145,8 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
                 MasterGame.__table__.insert().values(game_data)
             )
             db.commit()
-            with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Insert SUCCESS.\n")
         except Exception as e:
             db.rollback()
-            with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Insert FAILED: {e}\n")
             logger.error(f"Worker failed to insert game to DB: {e}")
         finally:
             db.close()
@@ -146,11 +154,13 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         return True
 
     except Exception as e:
-        with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Play Loop CRASHED: {e}\n")
         try:
-            engine.quit()
+            if hasattr(thread_local, "engine"):
+                thread_local.engine.quit()
         except:
             pass
+        if hasattr(thread_local, "engine"):
+            del thread_local.engine
         logger.error(f"Worker crashed during game: {e}")
         return None
 
@@ -164,10 +174,6 @@ import time
 def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
     logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
     logger.info(f"Each game will begin with {random_plies} random plies.")
-    
-    # Initialize the debug log
-    with open("/workspace/worker_crash.log", "w") as f:
-        f.write("=== Selfplay Debug Log ===\n")
 
     start_time = time.time()
     
