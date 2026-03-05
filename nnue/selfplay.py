@@ -1,6 +1,3 @@
-import argparse
-import datetime
-import logging
 import os
 import random
 import sys
@@ -33,7 +30,6 @@ from duchess.models import MasterGame
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
-import os
 from duchess.database import DATABASE_URL
 
 # Create a custom engine for workers with NO connection pooling (NullPool)
@@ -155,12 +151,11 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
             try:
                 if result.move not in board.legal_moves:
                     logger.warning(f"Engine returned illegal move {result.move} in fen {board.fen()}")
-                    engine.quit()
+                    # Don't quit the thread-local engine, just abort the game
                     return None
                 board.push(result.move)
             except ValueError:
                 logger.warning(f"Engine played illegal move {result.move} in fen {board.fen()}")
-                engine.quit()
                 return None
                 
             node = node.add_variation(result.move)
@@ -203,12 +198,13 @@ def play_game_wrapper(args):
     """Unpacks arguments for ThreadPoolExecutor."""
     return play_game(*args)
 
-import random
-import time
-
 def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
     logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
     logger.info(f"Each game will begin with {random_plies} random plies.")
+
+    # Initialize the debug log (Truncate it so we don't read old logs!)
+    with open("/workspace/worker_crash.log", "w") as f:
+        f.write("=== Selfplay Debug Log ===\n")
 
     start_time = time.time()
     
@@ -253,7 +249,6 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
     elapsed = time.time() - start_time
     logger.info(f"Self-play complete! Generated {completed_games} total games in {elapsed:.1f}s ({(completed_games/elapsed if elapsed > 0 else 0):.2f} games/sec)")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multithreaded Duchess Self-Play Generator.")
     parser.add_argument("--games", type=int, default=1000, help="Number of games to generate.")
@@ -262,13 +257,9 @@ if __name__ == "__main__":
     parser.add_argument("--depth", type=int, default=4, help="Fixed search depth for engine moves.")
     parser.add_argument("--random-plies", type=int, default=8, help="Number of completely random initial half-moves to enforce opening diversity.")
     parser.add_argument("--nnue", type=str, default=None, help="Path to absolute starting network architecture if bootstrapping iteratively.")
-    parser.add_argument("--syzygy", type=str, default=None, help="Optional path to Syzygy tablebase directory for perfect endgame play.")
-    parser.add_argument("--book", type=str, default=None, help="Path to a Polyglot opening book (.bin) for opening diversity.")
-
+    parser.add_argument("--syzygy", type=str, default=None, help="Path to Syzygy tablebases.")
+    parser.add_argument("--book", type=str, default=None, help="Path to Polyglot opening book (e.g., gm2001.bin) to use for alternative first plies.")
     args = parser.parse_args()
-    
-    if not os.path.exists(args.engine):
-        logger.error(f"Engine binary not found at {args.engine}. Please build it first.")
-        sys.exit(1)
-        
+
     generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy, args.book)
+
