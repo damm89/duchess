@@ -1,11 +1,10 @@
 import argparse
 import datetime
 import logging
-import multiprocessing
 import os
-import random
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 import chess
@@ -155,30 +154,12 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         logger.error(f"Worker crashed during game: {e}")
         return None
 
-def worker_init():
-    """Ignore SIGINT in workers so the master process can handle Ctrl+C gracefully."""
-    import signal
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+def play_game_wrapper(args):
+    """Unpacks arguments for ThreadPoolExecutor."""
+    return play_game(*args)
 
 import random
 import time
-
-def play_game_wrapper(args):
-    """Unpacks arguments for pool.imap_unordered and staggers startup IO safely."""
-    pid = os.getpid()
-    with open("/workspace/worker_crash.log", "a") as f:
-        f.write(f"[PID {pid}] Wrapper started.\n")
-    try:
-        # Use PID instead of random module, which deadlocks on massive Linux forks
-        stagger = (pid % 50) * 0.05
-        time.sleep(stagger)
-        with open("/workspace/worker_crash.log", "a") as f:
-            f.write(f"[PID {pid}] Sleep finished. Calling play_game...\n")
-        return play_game(*args)
-    except Exception as e:
-        with open("/workspace/worker_crash.log", "a") as f:
-            f.write(f"[PID {pid}] Wrapper CRASH: {e}\n")
-        return None
 
 def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
     logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
@@ -193,35 +174,36 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
     completed_games = 0
 
     try:
-        with multiprocessing.Pool(processes=threads, initializer=worker_init) as pool:
-            # We use imap_unordered so that short games don't get bottlenecked waiting behind a single long game.
-            # This is critical for scaling across 100+ cores!
-            jobs = pool.imap_unordered(
-                play_game_wrapper,
-                [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)] * num_games
-            )
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            # We use ThreadPoolExecutor because multiprocessing forks permanently deadlock on 126-core RunPod containers!
+            # Since the C++ engine does the heavy lifting, the Python GIL doesn't bottleneck us here.
+            
+            jobs = [
+                executor.submit(play_game_wrapper, (engine_path, depth, random_plies, nnue_path, syzygy_path, book_path))
+                for _ in range(num_games)
+            ]
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
-                for result in jobs:
-                    pbar.update(1)
-                    
-                    rate = pbar.format_dict.get("rate")
-                    if rate:
-                        avg_time = 1.0 / rate
-                        eta_seconds = (pbar.total - pbar.n) / rate
-                        eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
-                        pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
+                for future in as_completed(jobs):
+                    try:
+                        result = future.result()
+                        pbar.update(1)
                         
-                    if result:
-                        completed_games += 1
-                
+                        rate = pbar.format_dict.get("rate")
+                        if rate:
+                            avg_time = 1.0 / rate
+                            eta_seconds = (pbar.total - pbar.n) / rate
+                            eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
+                            pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
+                            
+                        if result:
+                            completed_games += 1
+                    except Exception as e:
+                        logger.error(f"Thread task crashed: {e}")
+
     except KeyboardInterrupt:
         logger.warning(f"Self-play interrupted by user! Stopping {threads} workers...")
-        pool.terminate()
-        pool.join()
         sys.exit(1)
-    finally:
-        pass # db.close() is no longer needed here as sessions are managed per worker
 
     elapsed = time.time() - start_time
     logger.info(f"Self-play complete! Generated {completed_games} total games in {elapsed:.1f}s ({(completed_games/elapsed if elapsed > 0 else 0):.2f} games/sec)")
@@ -231,7 +213,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multithreaded Duchess Self-Play Generator.")
     parser.add_argument("--games", type=int, default=1000, help="Number of games to generate.")
     parser.add_argument("--engine", type=str, default="engine/build/duchess_cli", help="Path to UCI engine.")
-    parser.add_argument("--threads", type=int, default=multiprocessing.cpu_count() - 1, help="Number of concurrent worker threads.")
+    parser.add_argument("--threads", type=int, default=os.cpu_count() - 1, help="Number of concurrent worker threads.")
     parser.add_argument("--depth", type=int, default=4, help="Fixed search depth for engine moves.")
     parser.add_argument("--random-plies", type=int, default=8, help="Number of completely random initial half-moves to enforce opening diversity.")
     parser.add_argument("--nnue", type=str, default=None, help="Path to absolute starting network architecture if bootstrapping iteratively.")
