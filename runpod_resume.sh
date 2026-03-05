@@ -9,7 +9,7 @@ echo "=== Resuming Duchess RL Loop on RunPod ==="
 # 1. System Dependencies
 echo "[1/4] Installing system dependencies..."
 apt-get update
-apt-get install -y postgresql postgresql-contrib libpq-dev git cmake g++ tmux sudo
+apt-get install -y postgresql postgresql-contrib libpq-dev git cmake g++ tmux sudo python3-venv
 
 # 2. Start PostgreSQL and Restore Database
 echo "[2/4] Starting PostgreSQL and Restoring Database..."
@@ -31,12 +31,20 @@ else
     echo "No database backup found. Starting fresh."
 fi
 
-# 3. Compile Engine
-echo "[3/4] Recompiling the C++ Engine..."
-cd /workspace/duchess/engine
+# 3. Setup Python and Compile Engine
+echo "[3/4] Setting up Python env and recompiling the C++ Engine..."
+cd /workspace/duchess
+
+if [ ! -d "py-duchess" ]; then
+    python3 -m venv py-duchess
+fi
+source py-duchess/bin/activate
+pip install -r requirements.txt
+
+cd engine
 rm -rf build
 mkdir build && cd build
-cmake .. -DPython3_EXECUTABLE="$(which python3)"
+cmake .. -DPython3_EXECUTABLE="/workspace/duchess/py-duchess/bin/python"
 make -j$(nproc)
 cd ../..
 
