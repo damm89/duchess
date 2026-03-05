@@ -126,6 +126,9 @@ def worker_init():
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+def play_game_wrapper(args):
+    """Unpacks arguments for pool.imap_unordered."""
+    return play_game(*args)
 
 def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
     logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
