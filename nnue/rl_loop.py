@@ -172,7 +172,16 @@ def main():
         # Update current network for the next iteration!
         current_nnue = std_bin_path
         logger.info(f"Iteration {i} complete! Engine successfully bootstrapped to new network.")
-
+        
+        # 6. Push .bin files to GitHub so weights aren't lost if the server dies
+        logger.info("Pushing latest Iteration weights to GitHub...")
+        push_cmd = [
+            "sh", "-c",
+            f"git add nnue/duchess_iter_{i}.bin nnue/duchess.bin && git commit -m 'Auto-save Iteration {i} NNUE weights' && git push"
+        ]
+        if not run_step("GitHub Auto-Save", push_cmd):
+            logger.warning("Failed to push to GitHub. Check SSH keys or internet connection.")
+            
     logger.info("\n==== REINFORCEMENT LEARNING PIPELINE COMPLETE ====")
 
 if __name__ == "__main__":
