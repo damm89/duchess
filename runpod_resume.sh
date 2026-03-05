@@ -35,6 +35,8 @@ fi
 echo "[3/4] Setting up Python env and recompiling the C++ Engine..."
 cd /workspace/duchess
 
+git submodule update --init --recursive
+
 if [ ! -d "py-duchess" ]; then
     python3 -m venv py-duchess
 fi
