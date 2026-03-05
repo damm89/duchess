@@ -8,7 +8,7 @@ import time
 import threading
 import resource
 import queue
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing.dummy as mp_dummy
 from typing import Optional
 
 # Force file descriptor limits up to handle 126 C++ processes + Syzygy tables
@@ -219,13 +219,14 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
     completed_games = 0
 
     try:
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            # We use ThreadPoolExecutor because multiprocessing forks permanently deadlock on 126-core RunPod containers!
-            # Since the C++ engine does the heavy lifting, the Python GIL doesn't bottleneck us here.
+        with mp_dummy.Pool(threads) as pool:
+            # We use mp_dummy.Pool instead of multiprocessing.Pool because real forks permanently 
+            # deadlock on 126-core RunPod containers. mp_dummy uses lightweight OS threads!
+            # We MUST use imap_unordered so the progress bar updates instantly when ANY game finishes,
+            # rather than waiting sequentially for the 1st submitted game (which might take 5 minutes!)
             
-            # Use a generator map instead of submit() to prevent queueing 5000 heavy futures into RAM at once!
             job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)] * num_games
-            results = executor.map(play_game_wrapper, job_args)
+            results = pool.imap_unordered(play_game_wrapper, job_args)
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
                 for result in results:
