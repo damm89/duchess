@@ -110,9 +110,9 @@ tmux send-keys -t training "source /workspace/duchess/py-duchess/bin/activate" E
 tmux send-keys -t training "cd /workspace/duchess" Enter
 tmux send-keys -t training "python nnue/rl_loop.py \
     --iterations 35 \
-    --games-per-iter 5000 \
+    --games-per-iter 10000 \
     --threads \$(nproc) \
-    --selfplay-depth 6 \
+    --selfplay-depth 3 \
     --epochs-per-iter 30 \
     $EXTRA_FLAGS" Enter
 
