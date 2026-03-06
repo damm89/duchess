@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2026-03-06 14:36",
+    "iteration": 14,
+    "opponent": "queen",
+    "depth": 6,
+    "games": 10,
+    "wins": 0,
+    "draws": 0,
+    "losses": 10,
+    "score_pct": 0.0,
+    "avg_moves": 38.0
+  }
+]
