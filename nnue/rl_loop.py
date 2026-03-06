@@ -85,6 +85,7 @@ def main():
     parser.add_argument("--stockfish", type=str, default="", help="Path to Stockfish (or any strong UCI engine) for distillation.")
     parser.add_argument("--distill-depth", type=int, default=12, help="Evaluation depth for distillation (default: 12).")
     parser.add_argument("--distill-games", type=int, default=10000, help="Max games to annotate for distillation (default: 10000).")
+    parser.add_argument("--distill-workers", type=int, default=4, help="Parallel Stockfish instances for distillation (default: 4; increase on high-core machines).")
     parser.add_argument("--distill-download", action="store_true", help="Auto-download the latest Lichess elite PGN if --distill-pgn file does not exist.")
 
     args = parser.parse_args()
@@ -120,6 +121,7 @@ def main():
                 "--out", distill_jsonl,
                 "--games", str(args.distill_games),
                 "--depth", str(args.distill_depth),
+                "--workers", str(args.distill_workers),
             ]
             if args.distill_download:
                 distill_cmd.append("--download")
