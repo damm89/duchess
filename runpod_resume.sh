@@ -35,6 +35,9 @@ fi
 echo "[3/4] Setting up Python env and recompiling the C++ Engine..."
 cd /workspace/duchess
 
+git config --global user.name "Duchess RunPod"
+git config --global user.email "runpod@duchess.test"
+git pull origin main
 git submodule update --init --recursive
 
 if [ ! -d "py-duchess" ]; then
