@@ -271,6 +271,7 @@ def run_gauntlet(
     nnue_path: Optional[str],
     syzygy_path: Optional[str],
     book_path: Optional[str] = None,
+    iteration: Optional[int] = None,
 ):
     e1_name = os.path.basename(engine1_path)
     e2_name = os.path.basename(engine2_path)
@@ -287,10 +288,8 @@ def run_gauntlet(
     
     # Auto-resume logic: Check if games for today's iteration already exist in the database
     try:
-        today_str = time.strftime("%Y.%m.%d")
-        gauntlet_event_name = f"Gauntlet: {e1_name} vs {e2_name}"
+        gauntlet_event_name = f"Gauntlet: {e1_name} vs {e2_name} Iteration {iteration}" if iteration else f"Gauntlet: {e1_name} vs {e2_name}"
         existing_games = db.query(MasterGame).filter(
-            MasterGame.date == today_str,
             MasterGame.event == gauntlet_event_name,
             MasterGame.training_use.is_(True)
         ).count()
@@ -416,8 +415,23 @@ if __name__ == "__main__":
     parser.add_argument("--nnue", type=str, default=None, help="Optional NNUE weights to load in Duchess.")
     parser.add_argument("--syzygy", type=str, default=None, help="Optional Syzygy tablebase directory path.")
     parser.add_argument("--book", type=str, default=None, help="Path to a Polyglot opening book (.bin) for opening diversity.")
+    parser.add_argument("--iteration", type=int, default=None, help="The current RL loop iteration (used to tag games in the DB to resume on crash).")
 
     args = parser.parse_args()
+
+    # Determine time control
+    tc_depth = args.depth
+    tc_time_per_move = None
+    tc_clock_time = None
+    tc_clock_inc = None
+
+    if tc_depth:
+        pass # Depth is already set
+    elif args.clock:
+        tc_clock_time = args.clock
+        tc_clock_inc = args.inc
+    else:
+        tc_time_per_move = args.time_per_move
 
     for path, label in [(args.engine1, "engine1"), (args.engine2, "engine2")]:
         if not os.path.exists(path):
@@ -429,12 +443,13 @@ if __name__ == "__main__":
         engine2_path=args.engine2,
         num_games=args.games,
         threads=args.threads,
-        depth=args.depth,
-        time_per_move=args.time_per_move,
-        clock_time=args.clock,
-        clock_inc=args.inc,
+        depth=tc_depth,
+        time_per_move=tc_time_per_move,
+        clock_time=tc_clock_time,
+        clock_inc=tc_clock_inc,
         random_plies=args.random_plies,
         nnue_path=args.nnue,
         syzygy_path=args.syzygy,
         book_path=args.book,
+        iteration=args.iteration,
     )
