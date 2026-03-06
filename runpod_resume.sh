@@ -9,7 +9,7 @@ echo "=== Resuming Duchess RL Loop on RunPod ==="
 # 1. System Dependencies
 echo "[1/4] Installing system dependencies..."
 apt-get update
-apt-get install -y postgresql postgresql-contrib libpq-dev git cmake g++ tmux sudo python3-venv
+apt-get install -y postgresql postgresql-contrib libpq-dev git cmake g++ tmux sudo python3-venv stockfish
 
 # 2. Start PostgreSQL and Restore Database
 echo "[2/4] Starting PostgreSQL and Restoring Database..."
@@ -104,5 +104,9 @@ echo "        --syzygy /workspace/Syzygy \\"
 echo "        --gauntlet-engine /workspace/Queen405x64/queen \\"
 echo "        --gauntlet-games 20 \\"
 echo "        --gauntlet-threads 4 \\"
-echo "        --gauntlet-depth 6"
+echo "        --gauntlet-depth 6 \\"
+echo "        --stockfish /usr/games/stockfish \\"
+echo "        --distill-pgn /workspace/lichess_elite.pgn \\"
+echo "        --distill-download \\"
+echo "        --distill-games 50000"
 echo "========================================="

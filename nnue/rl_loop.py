@@ -4,11 +4,12 @@
 """
 Reinforcement Learning Orchestrator.
 Automates the full pipeline:
-1. Self-Play (generates games into DB using current NNUE)
-2. Dataset Generation (extracts latest games to .jsonl)
-3. Training (trains a new PyTorch model)
-4. Export (converts .pt to .bin)
-5. Repeat (loads new .bin into self-play)
+1. Distillation (optional, one-time): annotate PGN positions with Stockfish
+2. Self-Play (generates games into DB using current NNUE)
+3. Dataset Generation (extracts latest games to .jsonl; distillation data mixed in)
+4. Training (trains a new PyTorch model)
+5. Export (converts .pt to .bin)
+6. Repeat (loads new .bin into self-play)
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ import datetime
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -79,7 +81,12 @@ def main():
     parser.add_argument("--gauntlet-threads", type=int, default=4, help="Number of parallel workers for gauntlet (default: 4; keep low to avoid overwhelming the opponent engine).")
     parser.add_argument("--gauntlet-depth", type=int, default=6, help="Fixed search depth for gauntlet games (default: 6; more reliable than time-based limits with external engines).")
     parser.add_argument("--book", type=str, default="", help="Path to a Polyglot opening book (.bin) for opening diversity in self-play and gauntlet.")
-    
+    parser.add_argument("--distill-pgn", type=str, default="", help="Optional: PGN file for one-time Stockfish distillation. Use with --stockfish.")
+    parser.add_argument("--stockfish", type=str, default="", help="Path to Stockfish (or any strong UCI engine) for distillation.")
+    parser.add_argument("--distill-depth", type=int, default=12, help="Evaluation depth for distillation (default: 12).")
+    parser.add_argument("--distill-games", type=int, default=10000, help="Max games to annotate for distillation (default: 10000).")
+    parser.add_argument("--distill-download", action="store_true", help="Auto-download the latest Lichess elite PGN if --distill-pgn file does not exist.")
+
     args = parser.parse_args()
     
     current_nnue = args.start_nnue
@@ -96,6 +103,30 @@ def main():
         if detected_nnue:
             current_nnue = detected_nnue
             logger.info(f"Found existing iteration {start_iter - 1} — resuming from iteration {start_iter}")
+
+    # Optional one-time distillation (run before the loop, skip if already done)
+    distill_jsonl = str(PROJECT_ROOT / "nnue" / "distill_dataset.jsonl")
+    use_distill = False
+    if args.stockfish and os.path.exists(args.stockfish) and (args.distill_pgn or args.distill_download):
+        if os.path.exists(distill_jsonl):
+            logger.info(f"Distillation dataset already exists at {distill_jsonl} — skipping.")
+            use_distill = True
+        else:
+            pgn_arg = args.distill_pgn or distill_jsonl.replace(".jsonl", ".pgn")
+            distill_cmd = [
+                PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "distill.py"),
+                "--pgn", pgn_arg,
+                "--engine", args.stockfish,
+                "--out", distill_jsonl,
+                "--games", str(args.distill_games),
+                "--depth", str(args.distill_depth),
+            ]
+            if args.distill_download:
+                distill_cmd.append("--download")
+            if run_step("Stockfish Distillation", distill_cmd):
+                use_distill = True
+            else:
+                logger.warning("Distillation failed — continuing without distillation data.")
 
     for i in range(start_iter, args.iterations + 1):
         logger.info(f"\n=========================================================")
@@ -156,7 +187,16 @@ def main():
             dataset_cmd.extend(["--nnue", current_nnue])
         if not run_step("Dataset Extraction", dataset_cmd):
             sys.exit(1)
-            
+
+        # Mix in distillation data if available
+        if use_distill:
+            try:
+                with open(distill_jsonl, "r") as df, open(jsonl_path, "a") as sf:
+                    shutil.copyfileobj(df, sf)
+                logger.info(f"Mixed distillation data from {distill_jsonl} into training dataset.")
+            except Exception as e:
+                logger.warning(f"Could not mix distillation data: {e}")
+
         # 3. Train Model (resume from previous iteration's checkpoint if available)
         pt_path = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i}.pt")
         prev_pt = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i - 1}.pt")
