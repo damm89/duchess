@@ -97,7 +97,7 @@ def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Op
         thread_local.engine = engine
     return thread_local.engine
 
-def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None, book_path: Optional[str] = None) -> Optional[bool]:
+def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None, book_path: Optional[str] = None, iteration: Optional[int] = None) -> Optional[bool]:
     """Play a single game of the engine against itself from a randomized start.
 
     Returns True on DB insert success.
