@@ -142,14 +142,16 @@ def main():
         logger.info(f"               STARTING ITERATION {i}/{args.iterations}")
         logger.info(f"=========================================================\n")
         
-        # 1. Self-Play
+        # 1. Self-Play (writes positions+scores directly to jsonl via engine.analyse())
+        jsonl_path = str(PROJECT_ROOT / "nnue" / f"dataset_iter_{i}.jsonl")
         selfplay_cmd = [
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "selfplay.py"),
             "--games", str(args.games_per_iter),
             "--threads", str(args.threads),
             "--depth", str(args.selfplay_depth),
             "--engine", engine_path,
-            "--iteration", str(i)
+            "--iteration", str(i),
+            "--out", jsonl_path
         ]
         if current_nnue and os.path.exists(current_nnue):
             selfplay_cmd.extend(["--nnue", current_nnue])
@@ -162,7 +164,7 @@ def main():
         if args.book and os.path.exists(args.book):
             selfplay_cmd.extend(["--book", args.book])
             logger.info(f"Using opening book: {args.book}")
-            
+
         if not run_step("Self-Play Generation", selfplay_cmd):
             sys.exit(1)
 
@@ -184,19 +186,6 @@ def main():
                 gauntlet_cmd.extend(["--book", args.book])
             if not run_step(f"Gauntlet vs {os.path.basename(args.gauntlet_engine)}", gauntlet_cmd):
                 logger.warning("Gauntlet step failed — continuing without those games.")
-            
-        # 2. Extract Dataset
-        jsonl_path = str(PROJECT_ROOT / "nnue" / f"dataset_iter_{i}.jsonl")
-        dataset_cmd = [
-            PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "dataset.py"),
-            "--out", jsonl_path,
-            "--engine", engine_path,
-            "--games", str(args.games_per_iter * 2 + args.gauntlet_games) # Grab self-play + gauntlet games
-        ]
-        if current_nnue and os.path.exists(current_nnue):
-            dataset_cmd.extend(["--nnue", current_nnue])
-        if not run_step("Dataset Extraction", dataset_cmd):
-            sys.exit(1)
 
         # Mix in distillation data if available
         if use_distill:

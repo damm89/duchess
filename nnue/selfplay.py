@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import json
 import logging
 import os
 import random
@@ -51,7 +52,7 @@ def database_writer_thread(total_games):
     db: Session = WorkerSessionLocal()
     written = 0
     batch = []
-    
+
     while written < total_games:
         try:
             game = game_queue.get(timeout=10.0)
@@ -59,7 +60,7 @@ def database_writer_thread(total_games):
                 break
             batch.append(game)
             written += 1
-            
+
             # Commit in batches of 50 or when finished
             if len(batch) >= 50 or written == total_games:
                 try:
@@ -69,24 +70,24 @@ def database_writer_thread(total_games):
                 except Exception as e:
                     logger.error(f"DB Batch Insert Failed: {e}")
                     db.rollback()
-            
+
             game_queue.task_done()
         except queue.Empty:
             continue
-            
+
     if batch:
         try:
             db.bulk_insert_mappings(MasterGame, batch)
             db.commit()
         except:
             db.rollback()
-            
+
     db.close()
 
 def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Optional[str]):
     """Returns a persisted engine instance for the current thread."""
     if not hasattr(thread_local, "engine"):
-        # Stagger initialization over 10 seconds to prevent 126 engines from 
+        # Stagger initialization over 10 seconds to prevent 126 engines from
         # simultaneously crashing the RunPod Network Drive while loading Syzygy
         time.sleep(random.uniform(0, 10.0))
         engine = chess.engine.SimpleEngine.popen_uci(engine_path)
@@ -97,10 +98,15 @@ def get_local_engine(engine_path: str, nnue_path: Optional[str], syzygy_path: Op
         thread_local.engine = engine
     return thread_local.engine
 
-def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str], syzygy_path: Optional[str] = None, book_path: Optional[str] = None, iteration: Optional[int] = None) -> Optional[bool]:
+def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Optional[str],
+              syzygy_path: Optional[str] = None, book_path: Optional[str] = None,
+              iteration: Optional[int] = None, skip_moves: int = 0,
+              sample_rate: int = 5) -> tuple[Optional[bool], list[str]]:
     """Play a single game of the engine against itself from a randomized start.
 
-    Returns True on DB insert success.
+    Uses engine.analyse() to capture both the best move and its score in one call,
+    writing positions directly to a .jsonl buffer (depth-quality labels, no re-evaluation).
+    Returns (True, json_lines) on success, (None, []) on failure.
     """
     pid = os.getpid()
     try:
@@ -109,12 +115,12 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
     except Exception as e:
         with open("/workspace/worker_crash.log", "a") as f: f.write(f"[PID {pid}] Thread {threading.get_ident()} CRASHED GETTING ENGINE: {e}\n")
         logger.error(f"Worker failed to start engine: {e}")
-        return None
+        return None, []
 
     try:
         board = chess.Board()
         game = chess.pgn.Game()
-        
+
         # 1. Opening phase — use book moves if available, else random
         if book_path:
             with chess.polyglot.open_reader(book_path) as reader:
@@ -141,50 +147,60 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         game.headers["White"] = "Duchess NNUE-Gen"
         game.headers["Black"] = "Duchess NNUE-Gen"
         game.headers["Date"] = time.strftime("%Y.%m.%d")
-        
+
         node = game
         limit = chess.engine.Limit(depth=depth)
+        positions = []  # buffer: (fen, score_cp) — written after wdl is known
+        move_idx = 0
 
-        # 2. Self-Play combat loop
+        # 2. Self-Play combat loop — analyse() gives move + score in one call
         while not board.is_game_over():
-            result = engine.play(board, limit)
-            if not result.move:
+            info = engine.analyse(board, limit)
+            pv = info.get("pv", [])
+            if not pv:
                 break
-            
-            try:
-                if result.move not in board.legal_moves:
-                    logger.warning(f"Engine returned illegal move {result.move} in fen {board.fen()}")
-                    # Don't quit the thread-local engine, just abort the game
-                    return None
-                board.push(result.move)
-            except ValueError:
-                logger.warning(f"Engine played illegal move {result.move} in fen {board.fen()}")
-                return None
-                
-            node = node.add_variation(result.move)
+            move = pv[0]
+            score = info["score"].white()
+
+            if move not in board.legal_moves:
+                logger.warning(f"Engine returned illegal move {move} in fen {board.fen()}")
+                return None, []
+
+            # Sample pre-push position (skip opening, 1-in-sample_rate, skip mates)
+            if move_idx >= skip_moves and not score.is_mate():
+                if move_idx % sample_rate == 0:
+                    positions.append((board.fen(), score.score()))
+
+            board.push(move)
+            node = node.add_variation(move)
+            move_idx += 1
 
         # 3. Game Conclusion
-        game.headers["Result"] = board.result()
+        result_str = board.result()
+        game.headers["Result"] = result_str
+        wdl = 1.0 if result_str == "1-0" else (0.0 if result_str == "0-1" else 0.5)
+
+        json_lines = [json.dumps({"fen": fen, "score": cp, "wdl": wdl}) for fen, cp in positions]
 
         exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
         pgn_string = game.accept(exporter)
-        
+
         game_data = {
             "event": game.headers.get("Event"),
             "date": game.headers.get("Date"),
             "white": game.headers.get("White"),
             "black": game.headers.get("Black"),
-            "result": game.headers.get("Result"),
+            "result": result_str,
             "white_elo": 0,
             "black_elo": 0,
             "eco": game.headers.get("ECO", ""),
             "move_text": pgn_string,
             "training_use": True
         }
-        
+
         # 4. Push to background writer thread to avoid Postgres deadlock
         game_queue.put(game_data)
-        return True
+        return True, json_lines
 
     except Exception as e:
         try:
@@ -195,13 +211,17 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
         if hasattr(thread_local, "engine"):
             del thread_local.engine
         logger.error(f"Worker crashed during game: {e}")
-        return None
+        return None, []
 
 def play_game_wrapper(args):
     """Unpacks arguments for ThreadPoolExecutor."""
     return play_game(*args)
 
-def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None, iteration: Optional[int] = None):
+def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int,
+                               random_plies: int, nnue_path: Optional[str] = None,
+                               syzygy_path: Optional[str] = None, book_path: Optional[str] = None,
+                               iteration: Optional[int] = None, out_path: Optional[str] = None,
+                               skip_moves: int = 0, sample_rate: int = 5):
     # Auto-resume logic: Check if games for today's iteration already exist in the database!
     db: Session = WorkerSessionLocal()
     event_name = f"Duchess Self-Play Iteration {iteration}" if iteration else "Duchess Self-Play"
@@ -215,7 +235,7 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
         existing_games = 0
     finally:
         db.close()
-        
+
     if existing_games >= num_games:
         logger.info(f"Skipping self-play: found {existing_games} existing games for today (Target: {num_games})")
         return
@@ -224,7 +244,7 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
         num_games -= existing_games
     else:
         logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
-        
+
     logger.info(f"Each game will begin with {random_plies} random plies.")
 
     # Initialize the debug log (Truncate it so we don't read old logs!)
@@ -232,42 +252,51 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
         f.write("=== Selfplay Debug Log ===\n")
 
     start_time = time.time()
-    
+
     # Start the DB writer daemon
     db_thread = threading.Thread(target=database_writer_thread, args=(num_games,), daemon=True)
     db_thread.start()
-    
+
     completed_games = 0
 
+    # Open output file in append mode — crash resume preserves positions from previous run
+    out_f = open(out_path, "a") if out_path else None
     try:
         with mp_dummy.Pool(threads) as pool:
-            # We use mp_dummy.Pool instead of multiprocessing.Pool because real forks permanently 
+            # We use mp_dummy.Pool instead of multiprocessing.Pool because real forks permanently
             # deadlock on 126-core RunPod containers. mp_dummy uses lightweight OS threads!
             # We MUST use imap_unordered so the progress bar updates instantly when ANY game finishes,
             # rather than waiting sequentially for the 1st submitted game (which might take 5 minutes!)
-            
-            job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path, iteration)] * num_games
+
+            job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path,
+                         iteration, skip_moves, sample_rate)] * num_games
             results = pool.imap_unordered(play_game_wrapper, job_args)
-            
+
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
-                for result in results:
+                for result, json_lines in results:
                     pbar.update(1)
-                    
+
                     rate = pbar.format_dict.get("rate")
                     if rate:
                         avg_time = 1.0 / rate
                         eta_seconds = (pbar.total - pbar.n) / rate
                         eta_dt = datetime.datetime.now() + datetime.timedelta(seconds=eta_seconds)
                         pbar.set_postfix_str(f"Avg: {avg_time:.1f}s/game | Finishes: {eta_dt.strftime('%b %d %H:%M:%S')}")
-                        
+
                     if result:
                         completed_games += 1
+                        if out_f:
+                            for line in json_lines:
+                                out_f.write(line + "\n")
 
     except KeyboardInterrupt:
         logger.warning(f"Self-play interrupted by user! Stopping {threads} workers...")
         game_queue.put(None) # Tell writer to stop
         sys.exit(1)
-        
+    finally:
+        if out_f:
+            out_f.close()
+
     # Wait for remaining DB writes
     db_thread.join(timeout=15.0)
 
@@ -285,7 +314,11 @@ if __name__ == "__main__":
     parser.add_argument("--syzygy", type=str, default=None, help="Path to Syzygy tablebases.")
     parser.add_argument("--book", type=str, default=None, help="Path to Polyglot opening book (e.g., gm2001.bin) to use for alternative first plies.")
     parser.add_argument("--iteration", type=int, default=None, help="The current RL loop iteration (used to tag games in the DB to resume on crash).")
+    parser.add_argument("--out", type=str, default=None, help="Output .jsonl file for training positions (appended, crash-safe).")
+    parser.add_argument("--skip-moves", type=int, default=0, help="Skip first N half-moves of combat phase (default: 0; random_plies already diversifies openings).")
+    parser.add_argument("--sample-rate", type=int, default=5, help="Sample 1-in-N positions per game (default: 5).")
     args = parser.parse_args()
 
-    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy, args.book, args.iteration)
-
+    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies,
+                               args.nnue, args.syzygy, args.book, args.iteration,
+                               args.out, args.skip_moves, args.sample_rate)
