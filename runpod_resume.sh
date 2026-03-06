@@ -4,6 +4,34 @@
 
 set -e
 
+# Parse flags
+AUTO_STOP=0
+for arg in "$@"; do
+    [ "$arg" = "--auto-stop" ] && AUTO_STOP=1
+done
+
+# Write stop_pod.sh — only wired up if --auto-stop is passed
+cat << 'STOPEOF' > /tmp/stop_pod.sh
+#!/bin/bash
+echo ""
+echo "!!! FATAL ERROR — requesting pod stop to avoid idle billing !!!"
+if [ -n "${RUNPOD_POD_ID:-}" ] && [ -n "${RUNPOD_API_KEY:-}" ]; then
+    curl -s -X POST "https://api.runpod.io/graphql" \
+        -H "content-type: application/json" \
+        -H "Authorization: Bearer $RUNPOD_API_KEY" \
+        -d "{\"query\":\"mutation { podStop(input: {podId: \\\"$RUNPOD_POD_ID\\\"}) { id } }\"}" > /dev/null
+    echo "Pod stop requested."
+else
+    echo "Set RUNPOD_API_KEY in your pod's environment variables to enable auto-stop."
+fi
+STOPEOF
+chmod +x /tmp/stop_pod.sh
+
+if [ "$AUTO_STOP" = "1" ]; then
+    trap /tmp/stop_pod.sh ERR
+    echo "[auto-stop ON] Pod will stop on fatal error."
+fi
+
 echo "=== Resuming Duchess RL Loop on RunPod ==="
 
 # 1. System Dependencies
@@ -108,13 +136,17 @@ tmux new-session -d -s training -x 220 -y 50
 
 tmux send-keys -t training "source /workspace/duchess/py-duchess/bin/activate" Enter
 tmux send-keys -t training "cd /workspace/duchess" Enter
-tmux send-keys -t training "python nnue/rl_loop.py \
+TRAIN_CMD="python nnue/rl_loop.py \
     --iterations 35 \
     --games-per-iter 10000 \
     --threads \$(nproc) \
     --selfplay-depth 3 \
     --epochs-per-iter 30 \
-    $EXTRA_FLAGS" Enter
+    $EXTRA_FLAGS"
+if [ "$AUTO_STOP" = "1" ]; then
+    TRAIN_CMD="$TRAIN_CMD || /tmp/stop_pod.sh"
+fi
+tmux send-keys -t training "$TRAIN_CMD" Enter
 
 echo ""
 echo "========================================="
