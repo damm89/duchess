@@ -127,6 +127,13 @@ def main():
                 distill_cmd.append("--download")
             if run_step("Stockfish Distillation", distill_cmd):
                 use_distill = True
+                # Push distillation dataset immediately so it survives pod restarts
+                push_distill_cmd = [
+                    "sh", "-c",
+                    "git add nnue/distill_dataset.jsonl && git commit -m 'Add Stockfish distillation dataset' && git pull --rebase origin main && git push"
+                ]
+                if not run_step("Push Distillation Dataset", push_distill_cmd):
+                    logger.warning("Failed to push distillation dataset — it will be regenerated on next pod restart.")
             else:
                 logger.warning("Distillation failed — continuing without distillation data.")
 
@@ -252,7 +259,7 @@ def main():
         logger.info("Pushing latest Iteration weights to GitHub...")
         push_cmd = [
             "sh", "-c",
-            f"git add nnue/duchess_iter_{i}.bin nnue/duchess.bin nnue/training_log.json && git commit -m 'Auto-save Iteration {i} NNUE weights' && git pull --rebase origin main && git push"
+            f"git add nnue/duchess_iter_{i}.bin nnue/duchess.bin nnue/training_log.json; git add nnue/distill_dataset.jsonl 2>/dev/null; git commit -m 'Auto-save Iteration {i} NNUE weights' && git pull --rebase origin main && git push"
         ]
         if not run_step("GitHub Auto-Save", push_cmd):
             logger.warning("Failed to push to GitHub. Check SSH keys or internet connection.")
