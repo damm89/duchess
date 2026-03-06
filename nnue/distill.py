@@ -58,6 +58,10 @@ def _annotate_game(args: tuple) -> list[str]:
     pgn_str, depth, skip_moves, sample_rate = args
     positions: list[str] = []
 
+    if _engine is None:
+        logger.error("Worker engine not initialized — skipping game.")
+        return positions
+
     try:
         game = chess.pgn.read_game(io.StringIO(pgn_str))
         if not game:
@@ -139,12 +143,9 @@ def download_lichess_elite(dest_path: str) -> bool:
         total = int(r.headers.get("content-length", 0))
 
         dctx = zstandard.ZstdDecompressor()
-        iter_kwargs = {"chunk_size": 1 << 20}
-
-        if HAS_TQDM and total:
-            progress = tqdm(total=total, unit="B", unit_scale=True, desc="Downloading")
-        else:
-            progress = None
+        # Progress tracks compressed bytes from the socket (matches content-length)
+        progress = tqdm(total=total or None, unit="B", unit_scale=True, desc="Downloading") if HAS_TQDM else None
+        compressed_read = 0
 
         with open(dest_path, "wb") as out_f:
             with dctx.stream_reader(r.raw) as reader:
@@ -153,8 +154,11 @@ def download_lichess_elite(dest_path: str) -> bool:
                     if not chunk:
                         break
                     out_f.write(chunk)
-                    if progress:
-                        progress.update(len(chunk))
+                    # Approximate compressed progress via raw socket position
+                    new_pos = r.raw.tell() if hasattr(r.raw, "tell") else 0
+                    if progress and new_pos > compressed_read:
+                        progress.update(new_pos - compressed_read)
+                        compressed_read = new_pos
 
         if progress:
             progress.close()
