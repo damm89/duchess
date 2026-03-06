@@ -137,7 +137,7 @@ def play_game(engine_path: str, depth: int, random_plies: int, nnue_path: Option
 
         # Start standard recording from the randomized board state
         game.setup(board)
-        game.headers["Event"] = "Duchess Self-Play"
+        game.headers["Event"] = f"Duchess Self-Play Iteration {iteration}" if iteration else "Duchess Self-Play"
         game.headers["White"] = "Duchess NNUE-Gen"
         game.headers["Black"] = "Duchess NNUE-Gen"
         game.headers["Date"] = time.strftime("%Y.%m.%d")
@@ -201,8 +201,30 @@ def play_game_wrapper(args):
     """Unpacks arguments for ThreadPoolExecutor."""
     return play_game(*args)
 
-def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None):
-    logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
+def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, depth: int, random_plies: int, nnue_path: Optional[str] = None, syzygy_path: Optional[str] = None, book_path: Optional[str] = None, iteration: Optional[int] = None):
+    # Auto-resume logic: Check if games for today's iteration already exist in the database!
+    db: Session = WorkerSessionLocal()
+    event_name = f"Duchess Self-Play Iteration {iteration}" if iteration else "Duchess Self-Play"
+    try:
+        existing_games = db.query(MasterGame).filter(
+            MasterGame.event == event_name,
+            MasterGame.training_use.is_(True)
+        ).count()
+    except Exception as e:
+        logger.warning(f"Could not check existing games: {e}")
+        existing_games = 0
+    finally:
+        db.close()
+        
+    if existing_games >= num_games:
+        logger.info(f"Skipping self-play: found {existing_games} existing games for today (Target: {num_games})")
+        return
+    elif existing_games > 0:
+        logger.info(f"Resuming self-play: found {existing_games} existing games. Generating {num_games - existing_games} more.")
+        num_games -= existing_games
+    else:
+        logger.info(f"Starting {threads} worker threads to generate {num_games} self-play games at Depth {depth}")
+        
     logger.info(f"Each game will begin with {random_plies} random plies.")
 
     # Initialize the debug log (Truncate it so we don't read old logs!)
@@ -224,7 +246,7 @@ def generate_selfplay_dataset(engine_path: str, num_games: int, threads: int, de
             # We MUST use imap_unordered so the progress bar updates instantly when ANY game finishes,
             # rather than waiting sequentially for the 1st submitted game (which might take 5 minutes!)
             
-            job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path)] * num_games
+            job_args = [(engine_path, depth, random_plies, nnue_path, syzygy_path, book_path, iteration)] * num_games
             results = pool.imap_unordered(play_game_wrapper, job_args)
             
             with tqdm(total=num_games, desc="Generating Games", unit="game", dynamic_ncols=True) as pbar:
@@ -262,7 +284,8 @@ if __name__ == "__main__":
     parser.add_argument("--nnue", type=str, default=None, help="Path to absolute starting network architecture if bootstrapping iteratively.")
     parser.add_argument("--syzygy", type=str, default=None, help="Path to Syzygy tablebases.")
     parser.add_argument("--book", type=str, default=None, help="Path to Polyglot opening book (e.g., gm2001.bin) to use for alternative first plies.")
+    parser.add_argument("--iteration", type=int, default=None, help="The current RL loop iteration (used to tag games in the DB to resume on crash).")
     args = parser.parse_args()
 
-    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy, args.book)
+    generate_selfplay_dataset(args.engine, args.games, args.threads, args.depth, args.random_plies, args.nnue, args.syzygy, args.book, args.iteration)
 

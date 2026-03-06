@@ -321,7 +321,7 @@ def run_gauntlet(
                 pool.apply_async(play_game, (
                     engine1_path, engine2_path, idx,
                     depth, time_per_move, clock_time, clock_inc,
-                    random_plies, nnue_path, syzygy_path, book_path,
+                    random_plies, nnue_path, syzygy_path, book_path, iteration
                 ))
                 for idx in range(num_games)
             ]
