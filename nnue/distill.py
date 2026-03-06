@@ -2,17 +2,15 @@
 # Duchess Chess — Copyright (c) 2026 Daniel Ammeraal
 # Licensed under the MIT License. See LICENSE for details.
 """
-Stockfish Distillation Dataset Generator.
+Distillation Dataset Generator.
 
-Annotates positions from a PGN file with a strong engine's evaluations
-to produce a high-quality .jsonl training dataset for NNUE.
+Two modes:
+  1. Lichess eval DB (recommended, no engine required):
+       python nnue/distill.py --evals-download --out nnue/distill_dataset.jsonl
 
-Usage:
-    # From a local PGN file:
-    python nnue/distill.py --pgn games.pgn --engine /usr/games/stockfish --out nnue/distill_dataset.jsonl
-
-    # Auto-download the latest Lichess elite PGN:
-    python nnue/distill.py --download --pgn /workspace/lichess_elite.pgn --engine /usr/games/stockfish --out nnue/distill_dataset.jsonl
+  2. PGN + local engine (legacy):
+       python nnue/distill.py --pgn games.pgn --engine /usr/games/stockfish --out nnue/distill_dataset.jsonl
+       python nnue/distill.py --pgn /workspace/lichess_elite.pgn --engine /usr/games/stockfish --download --out nnue/distill_dataset.jsonl
 """
 from __future__ import annotations
 
@@ -20,6 +18,7 @@ import argparse
 import io
 import json
 import logging
+import math
 import multiprocessing
 import os
 import random
@@ -42,7 +41,86 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Persistent per-worker engine ---
+LICHESS_EVALS_URL = "https://database.lichess.org/lichess_db_eval.jsonl.zst"
+
+
+# --- Lichess eval DB path ---
+
+def distill_from_evals(out_path: str, max_positions: int) -> int:
+    """Stream the Lichess evaluation database directly, no engine required.
+
+    Picks the deepest evaluation per position, derives WDL from centipawn score
+    via sigmoid, and writes positions in the standard .jsonl training format.
+    Returns the number of positions written.
+    """
+    try:
+        import requests
+        import zstandard
+    except ImportError as e:
+        logger.error(f"Missing dependency: {e}. Run: pip install requests zstandard")
+        return 0
+
+    logger.info(f"Streaming Lichess eval DB: {LICHESS_EVALS_URL}")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        r = requests.get(LICHESS_EVALS_URL, stream=True, timeout=60)
+        r.raise_for_status()
+    except Exception as exc:
+        logger.error(f"Download failed: {exc}")
+        return 0
+
+    dctx = zstandard.ZstdDecompressor()
+    progress = tqdm(total=max_positions, unit="pos", desc="Distilling evals") if HAS_TQDM else None
+    total_positions = 0
+
+    try:
+        with open(out_path, "w") as out_f:
+            with dctx.stream_reader(r.raw) as reader:
+                buf = b""
+                while total_positions < max_positions:
+                    chunk = reader.read(1 << 20)  # 1 MB chunks
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while b"\n" in buf and total_positions < max_positions:
+                        line_bytes, buf = buf.split(b"\n", 1)
+                        if not line_bytes.strip():
+                            continue
+                        try:
+                            entry = json.loads(line_bytes)
+                            fen = entry.get("fen")
+                            evals = entry.get("evals", [])
+                            if not fen or not evals:
+                                continue
+                            # Take the deepest available evaluation
+                            best = max(evals, key=lambda e: e.get("depth", 0))
+                            pvs = best.get("pvs", [])
+                            if not pvs:
+                                continue
+                            cp = pvs[0].get("cp")
+                            if cp is None:  # mate score — skip
+                                continue
+                            cp = max(-3000, min(3000, cp))  # clamp extreme outliers
+                            wdl = round(1.0 / (1.0 + math.exp(-cp / 400.0)), 6)
+                            out_f.write(json.dumps({"fen": fen, "score": cp, "wdl": wdl}) + "\n")
+                            total_positions += 1
+                            if progress:
+                                progress.update(1)
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+    except Exception as exc:
+        logger.error(f"Error processing eval DB: {exc}")
+        return total_positions
+    finally:
+        if progress:
+            progress.close()
+
+    logger.info(f"Done. Wrote {total_positions:,} positions to {out_path}")
+    return total_positions
+
+
+# --- PGN + engine path (legacy) ---
 
 _engine: Optional[chess.engine.SimpleEngine] = None
 
@@ -103,8 +181,6 @@ def _annotate_game(args: tuple) -> list[str]:
     return positions
 
 
-# --- Download helper ---
-
 def _lichess_elite_url(year: int, month: int) -> str:
     return f"https://database.lichess.org/elite/lichess_elite_{year:04d}-{month:02d}.pgn.zst"
 
@@ -120,7 +196,6 @@ def download_lichess_elite(dest_path: str) -> bool:
 
     Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # Try current month, then fall back up to 3 months (file may not be published yet)
     now = datetime.utcnow()
     for months_back in range(4):
         dt = now - timedelta(days=30 * months_back)
@@ -143,7 +218,6 @@ def download_lichess_elite(dest_path: str) -> bool:
         total = int(r.headers.get("content-length", 0))
 
         dctx = zstandard.ZstdDecompressor()
-        # Progress tracks compressed bytes from the socket (matches content-length)
         progress = tqdm(total=total or None, unit="B", unit_scale=True, desc="Downloading") if HAS_TQDM else None
         compressed_read = 0
 
@@ -154,7 +228,6 @@ def download_lichess_elite(dest_path: str) -> bool:
                     if not chunk:
                         break
                     out_f.write(chunk)
-                    # Approximate compressed progress via raw socket position
                     new_pos = r.raw.tell() if hasattr(r.raw, "tell") else 0
                     if progress and new_pos > compressed_read:
                         progress.update(new_pos - compressed_read)
@@ -170,8 +243,6 @@ def download_lichess_elite(dest_path: str) -> bool:
         logger.error(f"Download failed: {exc}")
         return False
 
-
-# --- Main ---
 
 def distill(
     pgn_path: str,
@@ -219,19 +290,37 @@ def distill(
     return total_positions
 
 
+# --- Main ---
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Annotate PGN positions with a strong engine for NNUE distillation.")
-    parser.add_argument("--pgn", required=True, help="Path to input PGN file (created by --download if missing).")
-    parser.add_argument("--engine", required=True, help="Path to UCI engine (e.g. Stockfish).")
+    parser = argparse.ArgumentParser(description="Generate NNUE distillation dataset from Lichess evals or PGN+engine.")
     parser.add_argument("--out", required=True, help="Output .jsonl file path.")
+
+    # Lichess eval DB mode (recommended)
+    parser.add_argument("--evals-download", action="store_true", help="Stream Lichess eval DB directly (no engine needed).")
+    parser.add_argument("--positions", type=int, default=500000, help="Max positions to extract from eval DB (default: 500000).")
+
+    # PGN + engine mode (legacy)
+    parser.add_argument("--pgn", default="", help="Path to input PGN file (used with --engine).")
+    parser.add_argument("--engine", default="", help="Path to UCI engine for PGN annotation.")
     parser.add_argument("--games", type=int, default=10000, help="Max games to annotate (default: 10000).")
     parser.add_argument("--depth", type=int, default=12, help="Evaluation depth per position (default: 12).")
     parser.add_argument("--workers", type=int, default=4, help="Parallel engine instances (default: 4).")
     parser.add_argument("--skip-moves", type=int, default=10, help="Skip first N half-moves per game (default: 10).")
     parser.add_argument("--sample-rate", type=int, default=3, help="Sample 1-in-N positions per game (default: 3).")
     parser.add_argument("--download", action="store_true", help="Download the latest Lichess elite PGN if --pgn file does not exist.")
+
     args = parser.parse_args()
 
+    if args.evals_download:
+        if not distill_from_evals(args.out, args.positions):
+            sys.exit(1)
+        return
+
+    # PGN path
+    if not args.pgn:
+        logger.error("Provide --pgn (PGN file path) or use --evals-download.")
+        sys.exit(1)
     if not os.path.exists(args.pgn):
         if args.download:
             if not download_lichess_elite(args.pgn):
@@ -239,8 +328,7 @@ def main() -> None:
         else:
             logger.error(f"PGN file not found: {args.pgn}. Use --download to fetch one automatically.")
             sys.exit(1)
-
-    if not os.path.exists(args.engine):
+    if not args.engine or not os.path.exists(args.engine):
         logger.error(f"Engine not found: {args.engine}")
         sys.exit(1)
 

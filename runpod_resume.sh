@@ -9,7 +9,7 @@ echo "=== Resuming Duchess RL Loop on RunPod ==="
 # 1. System Dependencies
 echo "[1/5] Installing system dependencies..."
 apt-get update -qq
-apt-get install -y postgresql postgresql-contrib libpq-dev git git-lfs cmake g++ tmux sudo python3-venv stockfish
+apt-get install -y postgresql postgresql-contrib libpq-dev git git-lfs cmake g++ tmux sudo python3-venv
 
 # 2. Start PostgreSQL and Restore Database
 echo "[2/5] Starting PostgreSQL and restoring database..."
@@ -97,12 +97,9 @@ else
     echo "  [!] Opening book not found at /workspace/duchess/assets/gm2001.bin — opening diversity disabled."
 fi
 
-if [ -f "/usr/games/stockfish" ]; then
-    EXTRA_FLAGS="$EXTRA_FLAGS --stockfish /usr/games/stockfish --distill-pgn /workspace/lichess_elite.pgn --distill-download --distill-games 50000 --distill-workers \$(nproc)"
-    echo "  [✓] Stockfish: /usr/games/stockfish"
-else
-    echo "  [!] Stockfish not found at /usr/games/stockfish — distillation disabled."
-fi
+# Lichess eval distillation — always enabled (no engine needed, skipped if dataset already exists)
+EXTRA_FLAGS="$EXTRA_FLAGS --distill-evals-download --distill-positions 500000"
+echo "  [✓] Lichess eval distillation enabled (500k positions)"
 
 # Kill any existing training session
 tmux kill-session -t training 2>/dev/null || true

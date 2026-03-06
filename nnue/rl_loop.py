@@ -81,12 +81,8 @@ def main():
     parser.add_argument("--gauntlet-threads", type=int, default=4, help="Number of parallel workers for gauntlet (default: 4; keep low to avoid overwhelming the opponent engine).")
     parser.add_argument("--gauntlet-depth", type=int, default=6, help="Fixed search depth for gauntlet games (default: 6; more reliable than time-based limits with external engines).")
     parser.add_argument("--book", type=str, default="", help="Path to a Polyglot opening book (.bin) for opening diversity in self-play and gauntlet.")
-    parser.add_argument("--distill-pgn", type=str, default="", help="Optional: PGN file for one-time Stockfish distillation. Use with --stockfish.")
-    parser.add_argument("--stockfish", type=str, default="", help="Path to Stockfish (or any strong UCI engine) for distillation.")
-    parser.add_argument("--distill-depth", type=int, default=12, help="Evaluation depth for distillation (default: 12).")
-    parser.add_argument("--distill-games", type=int, default=10000, help="Max games to annotate for distillation (default: 10000).")
-    parser.add_argument("--distill-workers", type=int, default=4, help="Parallel Stockfish instances for distillation (default: 4; increase on high-core machines).")
-    parser.add_argument("--distill-download", action="store_true", help="Auto-download the latest Lichess elite PGN if --distill-pgn file does not exist.")
+    parser.add_argument("--distill-evals-download", action="store_true", help="Stream Lichess eval DB for one-time distillation (no engine needed). Skipped if distill_dataset.jsonl already exists.")
+    parser.add_argument("--distill-positions", type=int, default=500000, help="Max positions to extract from Lichess eval DB (default: 500000).")
 
     args = parser.parse_args()
     
@@ -108,32 +104,26 @@ def main():
     # Optional one-time distillation (run before the loop, skip if already done)
     distill_jsonl = str(PROJECT_ROOT / "nnue" / "distill_dataset.jsonl")
     use_distill = False
-    if args.stockfish and os.path.exists(args.stockfish) and (args.distill_pgn or args.distill_download):
+    if args.distill_evals_download:
         if os.path.exists(distill_jsonl):
             logger.info(f"Distillation dataset already exists at {distill_jsonl} — skipping.")
             use_distill = True
         else:
-            pgn_arg = args.distill_pgn or distill_jsonl.replace(".jsonl", ".pgn")
             distill_cmd = [
                 PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "distill.py"),
-                "--pgn", pgn_arg,
-                "--engine", args.stockfish,
+                "--evals-download",
+                "--positions", str(args.distill_positions),
                 "--out", distill_jsonl,
-                "--games", str(args.distill_games),
-                "--depth", str(args.distill_depth),
-                "--workers", str(args.distill_workers),
             ]
-            if args.distill_download:
-                distill_cmd.append("--download")
-            if run_step("Stockfish Distillation", distill_cmd):
+            if run_step("Lichess Eval Distillation", distill_cmd):
                 use_distill = True
                 # Push distillation dataset immediately so it survives pod restarts
                 push_distill_cmd = [
                     "sh", "-c",
-                    "git add nnue/distill_dataset.jsonl && git commit -m 'Add Stockfish distillation dataset' && git pull --rebase origin main && git push"
+                    "git add nnue/distill_dataset.jsonl && git commit -m 'Add Lichess eval distillation dataset' && git pull --rebase origin main && git push"
                 ]
                 if not run_step("Push Distillation Dataset", push_distill_cmd):
-                    logger.warning("Failed to push distillation dataset — it will be regenerated on next pod restart.")
+                    logger.warning("Failed to push distillation dataset — it will be re-downloaded on next pod restart.")
             else:
                 logger.warning("Distillation failed — continuing without distillation data.")
 
