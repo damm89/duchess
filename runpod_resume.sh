@@ -38,6 +38,8 @@ cd /workspace/duchess
 git config --global user.name "Duchess RunPod"
 git config --global user.email "runpod@duchess.test"
 git config --global credential.helper store
+apt-get install -y git-lfs
+git lfs install
 git pull origin main
 git submodule update --init --recursive
 
