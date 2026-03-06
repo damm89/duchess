@@ -90,7 +90,8 @@ def main():
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "selfplay.py"),
             "--games", str(args.games_per_iter),
             "--threads", str(args.threads),
-            "--engine", engine_path
+            "--engine", engine_path,
+            "--iteration", str(i)
         ]
         if current_nnue and os.path.exists(current_nnue):
             selfplay_cmd.extend(["--nnue", current_nnue])
@@ -107,7 +108,6 @@ def main():
         if not run_step("Self-Play Generation", selfplay_cmd):
             sys.exit(1)
 
-        # 1b. Optional Gauntlet vs external engine
         if args.gauntlet_engine and os.path.exists(args.gauntlet_engine):
             gauntlet_cmd = [
                 PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "gauntlet.py"),
@@ -115,6 +115,7 @@ def main():
                 "--engine2", args.gauntlet_engine,
                 "--games", str(args.gauntlet_games),
                 "--threads", str(args.threads),
+                "--iteration", str(i)
             ]
             if current_nnue and os.path.exists(current_nnue):
                 gauntlet_cmd.extend(["--nnue", current_nnue])
