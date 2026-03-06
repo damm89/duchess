@@ -137,7 +137,7 @@ tmux new-session -d -s training -x 220 -y 50
 tmux send-keys -t training "source /workspace/duchess/py-duchess/bin/activate" Enter
 tmux send-keys -t training "cd /workspace/duchess" Enter
 TRAIN_CMD="python nnue/rl_loop.py \
-    --iterations 35 \
+    --iterations 50 \
     --games-per-iter 10000 \
     --threads \$(nproc) \
     --selfplay-depth 3 \

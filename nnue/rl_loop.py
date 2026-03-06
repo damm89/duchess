@@ -251,5 +251,10 @@ def main():
             
     logger.info("\n==== REINFORCEMENT LEARNING PIPELINE COMPLETE ====")
 
+    # Stop the pod if running on RunPod (avoids idle billing after training finishes)
+    if os.path.exists("/tmp/stop_pod.sh"):
+        logger.info("All iterations complete — stopping pod.")
+        os.system("/tmp/stop_pod.sh")
+
 if __name__ == "__main__":
     main()
