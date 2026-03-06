@@ -27,7 +27,16 @@ import random
 import signal
 import sys
 import time
+import resource
 from typing import Optional
+
+# Force file descriptor limits up to handle massive parallel engine gauntlets
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target_limit = min(100000, hard)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (target_limit, hard))
+except Exception as e:
+    print(f"WARNING: Failed to increase RLIMIT_NOFILE: {e}")
 
 import chess
 import chess.engine
