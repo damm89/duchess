@@ -4,7 +4,16 @@ import json
 import logging
 import os
 import multiprocessing.dummy as mp_dummy
+import resource
 from tqdm import tqdm
+
+# Force file descriptor limits up to handle 126 C++ processes
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target_limit = min(100000, hard)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (target_limit, hard))
+except Exception as e:
+    logging.warning(f"Failed to increase RLIMIT_NOFILE: {e}")
 
 import chess
 import chess.engine
