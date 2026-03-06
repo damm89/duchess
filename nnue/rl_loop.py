@@ -75,6 +75,7 @@ def main():
     parser.add_argument("--syzygy", type=str, default="", help="Optional: Path to Syzygy tablebase directory for perfect endgame play during self-play.")
     parser.add_argument("--gauntlet-engine", type=str, default="", help="Optional: Path to an opponent UCI engine. When set, plays extra games vs this engine before each training step.")
     parser.add_argument("--gauntlet-games", type=int, default=50, help="Number of gauntlet games per iteration (used with --gauntlet-engine).")
+    parser.add_argument("--gauntlet-threads", type=int, default=4, help="Number of parallel workers for gauntlet (default: 4; keep low to avoid overwhelming the opponent engine).")
     parser.add_argument("--book", type=str, default="", help="Path to a Polyglot opening book (.bin) for opening diversity in self-play and gauntlet.")
     
     args = parser.parse_args()
@@ -128,7 +129,7 @@ def main():
                 "--engine1", engine_path,
                 "--engine2", args.gauntlet_engine,
                 "--games", str(args.gauntlet_games),
-                "--threads", str(args.threads),
+                "--threads", str(args.gauntlet_threads),
                 "--iteration", str(i)
             ]
             if current_nnue and os.path.exists(current_nnue):
