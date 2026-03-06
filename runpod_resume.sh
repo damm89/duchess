@@ -43,6 +43,9 @@ fi
 source py-duchess/bin/activate
 pip install -r requirements.txt
 
+# Initialize Database Schema if creating a fresh database
+alembic upgrade head
+
 cd engine
 rm -rf build
 mkdir build && cd build
