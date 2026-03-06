@@ -69,6 +69,7 @@ def main():
     parser.add_argument("--iterations", type=int, default=10, help="Number of full RL loops to run.")
     parser.add_argument("--games-per-iter", type=int, default=5000, help="Number of self-play games to generate per iteration.")
     parser.add_argument("--threads", type=int, default=10, help="Number of engine threads for self-play.")
+    parser.add_argument("--selfplay-depth", type=int, default=6, help="Fixed search depth for self-play games (default: 6).")
     parser.add_argument("--start-nnue", type=str, default="", help="Optional: Path to an existing .bin network to bootstrap from.")
     parser.add_argument("--start-iter", type=int, default=1, help="Starting iteration number (to resume a previous run).")
     parser.add_argument("--epochs-per-iter", type=int, default=20, help="Number of training epochs per iteration.")
@@ -106,6 +107,7 @@ def main():
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "selfplay.py"),
             "--games", str(args.games_per_iter),
             "--threads", str(args.threads),
+            "--depth", str(args.selfplay_depth),
             "--engine", engine_path,
             "--iteration", str(i)
         ]
