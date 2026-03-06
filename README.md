@@ -24,8 +24,9 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 
 ┌─────────────────────────────────────────────────┐
 │  NNUE Training Pipeline  (nnue/)                │
-│  selfplay.py · dataset.py · train.py            │
-│  export.py · rl_loop.py (iterative RL)          │
+│  selfplay.py · gauntlet.py · dataset.py         │
+│  train.py · export.py · match.py                │
+│  rl_loop.py (iterative RL orchestrator)         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -98,14 +99,15 @@ Rich handcrafted eval used standalone and blended 50/50 with NNUE: passed/double
 
 ### NNUE Training (in progress)
 
-The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Current strategy: depth 4 for initial iterations, increase to depth 6-8 as the network matures. Training resumes from the previous iteration's checkpoint so each network builds on what came before. NNUE weights, PyTorch models, and datasets are version-controlled via Git LFS for seamless syncing across machines.
+The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Both self-play and gauntlet run at depth 6. Training resumes from the previous iteration's checkpoint so each network builds on what came before. Training loss per iteration is logged to `training_log.json`. Standalone match results (no DB) are tracked in `match_results.json` via `match.py`.
+
+Git storage: only the latest `duchess_iter_N.bin` is kept in the repository (older weights and all `.pt`/`.jsonl` checkpoints are excluded after use).
 
 ### Remaining
 
 | Priority | Feature | Expected impact |
 |---|---|---|
-| High | More RL iterations (10-20+) | Network learns from more diverse positions |
-| High | Increase training depth to 6-8 | Cleaner evaluation signal |
+| High | More RL iterations (23+ done, continuing) | Network learns from more diverse positions |
 | Medium | Distillation from Stockfish | Bootstrap from strong evaluations |
 | Medium | Smart time management | Better use of clock in timed games |
 
