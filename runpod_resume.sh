@@ -7,38 +7,34 @@ set -e
 echo "=== Resuming Duchess RL Loop on RunPod ==="
 
 # 1. System Dependencies
-echo "[1/4] Installing system dependencies..."
-apt-get update
-apt-get install -y postgresql postgresql-contrib libpq-dev git cmake g++ tmux sudo python3-venv stockfish
+echo "[1/5] Installing system dependencies..."
+apt-get update -qq
+apt-get install -y postgresql postgresql-contrib libpq-dev git git-lfs cmake g++ tmux sudo python3-venv stockfish
 
 # 2. Start PostgreSQL and Restore Database
-echo "[2/4] Starting PostgreSQL and Restoring Database..."
+echo "[2/5] Starting PostgreSQL and restoring database..."
 service postgresql start
 
-# Create the user and an empty database
 su - postgres -c "psql -c \"CREATE USER root WITH SUPERUSER;\"" || true
 su - postgres -c "createdb duchess_db" || true
 
-# Restore the most recent backup if it exists
 if [ -f "/workspace/duchess_db_backup.sql" ]; then
-    echo "Found existing database backup! Restoring..."
-    # Drop the empty db and recreate it so the restore applies cleanly
+    echo "Found existing database backup — restoring..."
     su - postgres -c "dropdb duchess_db"
     su - postgres -c "createdb duchess_db"
     pg_restore -U root -d duchess_db -1 /workspace/duchess_db_backup.sql || psql -U root -d duchess_db -f /workspace/duchess_db_backup.sql
-    echo "Database restored successfully!"
+    echo "Database restored."
 else
-    echo "No database backup found. Starting fresh."
+    echo "No backup found — starting fresh."
 fi
 
-# 3. Setup Python and Compile Engine
-echo "[3/4] Setting up Python env and recompiling the C++ Engine..."
+# 3. Setup Python, pull latest code, compile engine
+echo "[3/5] Setting up Python env and compiling engine..."
 cd /workspace/duchess
 
 git config --global user.name "Duchess RunPod"
 git config --global user.email "runpod@duchess.test"
 git config --global credential.helper store
-apt-get install -y git-lfs
 git lfs install
 git pull origin main
 git submodule update --init --recursive
@@ -47,20 +43,19 @@ if [ ! -d "py-duchess" ]; then
     python3 -m venv py-duchess
 fi
 source py-duchess/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -q
 
-# Initialize Database Schema if creating a fresh database
 alembic upgrade head
 
 cd engine
 rm -rf build
 mkdir build && cd build
-cmake .. -DPython3_EXECUTABLE="/workspace/duchess/py-duchess/bin/python"
+cmake .. -DPython3_EXECUTABLE="/workspace/duchess/py-duchess/bin/python" -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 cd ../..
 
-# 4. Start the Backup Daemon
-echo "[4/4] Starting continuous database backup daemon..."
+# 4. Start the database backup daemon
+echo "[4/5] Starting database backup daemon..."
 cat << 'EOF' > /workspace/backup_db.sh
 #!/bin/bash
 while true; do
@@ -71,43 +66,38 @@ EOF
 chmod +x /workspace/backup_db.sh
 nohup /workspace/backup_db.sh > /workspace/backup.log 2>&1 &
 
+# 5. Launch the training loop in a tmux session
+echo "[5/5] Launching training loop..."
+
+# Kill any existing training session
+tmux kill-session -t training 2>/dev/null || true
+
+tmux new-session -d -s training -x 220 -y 50
+
+tmux send-keys -t training "source /workspace/duchess/py-duchess/bin/activate" Enter
+tmux send-keys -t training "cd /workspace/duchess" Enter
+tmux send-keys -t training "python nnue/rl_loop.py \
+    --iterations 35 \
+    --games-per-iter 5000 \
+    --threads \$(nproc) \
+    --selfplay-depth 6 \
+    --epochs-per-iter 30 \
+    --book /workspace/duchess/assets/gm2001.bin \
+    --syzygy /workspace/Syzygy \
+    --gauntlet-engine /workspace/Queen405x64/queen \
+    --gauntlet-games 20 \
+    --gauntlet-threads 4 \
+    --gauntlet-depth 6 \
+    --stockfish /usr/games/stockfish \
+    --distill-pgn /workspace/lichess_elite.pgn \
+    --distill-download \
+    --distill-games 50000 \
+    --distill-workers \$(nproc)" Enter
+
 echo ""
 echo "========================================="
-echo "✅ Setup Complete!"
-echo "Your database is restored and the engine is compiled."
-echo "To resume your training loop, run these exact commands:"
+echo "✅ Setup complete — training is running!"
 echo ""
-echo "    cd /workspace/duchess"
-echo "    tmux new -s training"
-echo "    source py-duchess/bin/activate"
-LATEST_WEIGHTS=$(ls -v /workspace/duchess/nnue/duchess_iter_*.bin 2>/dev/null | tail -n 1)
-if [ -z "$LATEST_WEIGHTS" ]; then
-    START_ITER=1
-    START_NNUE="nnue/duchess.bin"
-else
-    # Extract the number from duchess_iter_X.bin
-    LAST_NUM=$(echo "$LATEST_WEIGHTS" | grep -o -E '[0-9]+' | tail -n 1)
-    START_ITER=$((LAST_NUM + 1))
-    START_NNUE="nnue/duchess_iter_${LAST_NUM}.bin"
-fi
-
-echo "    python nnue/rl_loop.py \\"
-echo "        --iterations 35 \\"
-echo "        --games-per-iter 5000 \\"
-echo "        --threads \$(nproc) \\"
-echo "        --selfplay-depth 6 \\"
-echo "        --epochs-per-iter 20 \\"
-echo "        --start-iter $START_ITER \\"
-echo "        --start-nnue $START_NNUE \\"
-echo "        --book /workspace/duchess/assets/gm2001.bin \\"
-echo "        --syzygy /workspace/Syzygy \\"
-echo "        --gauntlet-engine /workspace/Queen405x64/queen \\"
-echo "        --gauntlet-games 20 \\"
-echo "        --gauntlet-threads 4 \\"
-echo "        --gauntlet-depth 6 \\"
-echo "        --stockfish /usr/games/stockfish \\"
-echo "        --distill-pgn /workspace/lichess_elite.pgn \\"
-echo "        --distill-download \\"
-echo "        --distill-games 50000 \\"
-echo "        --distill-workers \$(nproc)"
+echo "  Watch:  tmux attach -t training"
+echo "  Detach: Ctrl+B then D"
 echo "========================================="
