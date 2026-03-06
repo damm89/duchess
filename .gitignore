@@ -43,4 +43,6 @@ compacted.txt
 # Agent instructions (not part of the app)
 agent_instructions/
 **/engine_phase1_instructions.md
-# NNUE weights, models, and datasets are tracked via Git LFS
+# NNUE intermediate checkpoints (obsolete after training)
+nnue/duchess_iter_*.pt
+nnue/dataset_iter_*.jsonl

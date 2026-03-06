@@ -29,6 +29,20 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHON_EXE = sys.executable
 
+def detect_resume_iter(nnue_dir: Path, max_check: int = 100) -> tuple[int, str | None]:
+    """Scan nnue_dir for the highest completed iteration and return (start_iter, nnue_path).
+
+    A completed iteration has both a .bin and a .pt checkpoint present.
+    Returns (1, None) if nothing is found (fresh start).
+    """
+    for check_iter in range(max_check, 0, -1):
+        bin_file = nnue_dir / f"duchess_iter_{check_iter}.bin"
+        pt_file = nnue_dir / f"duchess_iter_{check_iter}.pt"
+        if bin_file.exists() and pt_file.exists():
+            return check_iter + 1, str(bin_file)
+    return 1, None
+
+
 def run_step(name: str, cmd: list[str]) -> bool:
     logger.info(f"==== STARTING STEP: {name} ====")
     logger.info(f"Command: {' '.join(cmd)}")
@@ -71,14 +85,10 @@ def main():
     # Auto-detect resume: if --start-iter not set, check for existing iteration files
     start_iter = args.start_iter
     if start_iter == 1 and not args.start_nnue:
-        for check_iter in range(100, 0, -1):
-            bin_file = PROJECT_ROOT / "nnue" / f"duchess_iter_{check_iter}.bin"
-            pt_file = PROJECT_ROOT / "nnue" / f"duchess_iter_{check_iter}.pt"
-            if bin_file.exists() and pt_file.exists():
-                start_iter = check_iter + 1
-                current_nnue = str(bin_file)
-                logger.info(f"Found existing iteration {check_iter} — resuming from iteration {start_iter}")
-                break
+        start_iter, detected_nnue = detect_resume_iter(PROJECT_ROOT / "nnue")
+        if detected_nnue:
+            current_nnue = detected_nnue
+            logger.info(f"Found existing iteration {start_iter - 1} — resuming from iteration {start_iter}")
 
     for i in range(start_iter, args.iterations + 1):
         logger.info(f"\n=========================================================")

@@ -70,6 +70,7 @@ def play_game(
     nnue_path: Optional[str],
     syzygy_path: Optional[str],
     book_path: Optional[str] = None,
+    iteration: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Play one game between engine1 (Duchess) and engine2.
@@ -129,7 +130,8 @@ def play_game(
         white_name = engine1_name if duchess_is_white else engine2_name
         black_name = engine2_name if duchess_is_white else engine1_name
 
-        game.headers["Event"] = f"Duchess Gauntlet: {engine1_name} vs {engine2_name}"
+        event_name = f"Gauntlet: {engine1_name} vs {engine2_name} Iteration {iteration}" if iteration else f"Gauntlet: {engine1_name} vs {engine2_name}"
+        game.headers["Event"] = event_name
         game.headers["White"] = white_name
         game.headers["Black"] = black_name
         game.headers["Date"] = datetime.date.today().strftime("%Y.%m.%d")
