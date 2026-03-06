@@ -37,6 +37,7 @@ cd /workspace/duchess
 
 git config --global user.name "Duchess RunPod"
 git config --global user.email "runpod@duchess.test"
+git config --global credential.helper store
 git pull origin main
 git submodule update --init --recursive
 
