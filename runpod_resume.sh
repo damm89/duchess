@@ -71,12 +71,26 @@ echo ""
 echo "    cd /workspace/duchess"
 echo "    tmux new -s training"
 echo "    source py-duchess/bin/activate"
+LATEST_WEIGHTS=$(ls -v /workspace/duchess/nnue/duchess_iter_*.bin 2>/dev/null | tail -n 1)
+if [ -z "$LATEST_WEIGHTS" ]; then
+    START_ITER=1
+    START_NNUE="nnue/duchess.bin"
+else
+    # Extract the number from duchess_iter_X.bin
+    LAST_NUM=$(echo "$LATEST_WEIGHTS" | grep -o -E '[0-9]+' | tail -n 1)
+    START_ITER=$((LAST_NUM + 1))
+    START_NNUE="nnue/duchess_iter_${LAST_NUM}.bin"
+fi
+
 echo "    python nnue/rl_loop.py \\"
 echo "        --iterations 35 \\"
 echo "        --games-per-iter 5000 \\"
 echo "        --threads \$(nproc) \\"
 echo "        --epochs-per-iter 20 \\"
-echo "        --start-iter 7 \\"
-echo "        --start-nnue nnue/duchess.bin \\"
-echo "        --syzygy /workspace/Syzygy"
+echo "        --start-iter $START_ITER \\"
+echo "        --start-nnue $START_NNUE \\"
+echo "        --book /workspace/duchess/assets/gm2001.bin \\"
+echo "        --syzygy /workspace/Syzygy \\"
+echo "        --gauntlet-engine /workspace/Queen405x64/queen \\"
+echo "        --gauntlet-games 20"
 echo "========================================="
