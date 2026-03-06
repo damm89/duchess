@@ -106,8 +106,14 @@ def main():
     use_distill = False
     if args.distill_evals_download:
         if os.path.exists(distill_jsonl):
-            logger.info(f"Distillation dataset already exists at {distill_jsonl} — skipping.")
-            use_distill = True
+            line_count = sum(1 for _ in open(distill_jsonl))
+            if line_count > 0:
+                sample = json.loads(open(distill_jsonl).readline())
+                logger.info(f"Distillation dataset: {line_count:,} positions — sample: {sample}")
+                use_distill = True
+            else:
+                logger.warning(f"Distillation dataset exists but is empty — re-downloading.")
+                os.remove(distill_jsonl)
         else:
             distill_cmd = [
                 PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "distill.py"),
