@@ -2,8 +2,9 @@ import argparse
 import io
 import json
 import logging
-import random
 import os
+import multiprocessing.dummy as mp_dummy
+from tqdm import tqdm
 
 import chess
 import chess.engine
@@ -32,31 +33,20 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
         logging.warning("No games found in the database. Run the PGN importer first (Phase 6.2).")
         return
 
-    logging.info(f"Loaded {len(games)} games from DB. Starting engine {engine_path} at depth {depth}...")
+    logging.info(f"Loaded {len(games)} games from DB. Starting engine pool at depth {depth}...")
 
-    extracted_positions = 0
-
-    def start_engine():
-        eng = chess.engine.SimpleEngine.popen_uci(engine_path)
+    def extract_game(row):
+        # Start a thread-local engine to prevent lockups
+        engine = chess.engine.SimpleEngine.popen_uci(engine_path)
         if nnue_path and os.path.exists(nnue_path):
-            eng.configure({"NNUEFile": nnue_path})
-        return eng
-
-    try:
-        engine = start_engine()
-    except Exception as e:
-        logging.error(f"Failed to start engine: {e}")
-        return
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        for idx, row in enumerate(games):
-            if idx % 100 == 0:
-                logging.info(f"Processed {idx}/{len(games)} games... ({extracted_positions} positions extracted)")
-                
+            engine.configure({"NNUEFile": nnue_path})
+            
+        extracted_batch = []
+        try:
             pgn_str = io.StringIO(row.move_text)
             game = chess.pgn.read_game(pgn_str)
             if not game:
-                continue
+                return extracted_batch
                 
             result_str = row.result
             if result_str == "1-0":
@@ -74,42 +64,42 @@ def generate_dataset(output_file: str, max_games: int, engine_path: str, depth: 
                 if move_idx < 15:
                     continue
                 
-                # Never analyse game-over positions — the engine returns (none) or crashes
+                # Never analyse game-over positions — the engine returns "none"
                 if board.is_game_over():
                     break
                     
                 # Extract roughly 1 in every 5 positions to avoid heavy correlation
                 if move_idx % 5 == 0:
-                    try:
-                        info = engine.analyse(board, chess.engine.Limit(depth=depth, time=10.0))
-                        score = info["score"].white()
-                        
-                        # We skip forced mates for simple evaluations right now
-                        if score.is_mate():
-                            continue
-                            
-                        centipawns = score.score()
-                        
-                        f.write(json.dumps({
-                            "fen": board.fen(),
-                            "score": centipawns,
-                            "wdl": wdl
-                        }) + "\n")
-                        extracted_positions += 1
-                    except (chess.engine.EngineError, chess.engine.EngineTerminatedError, TimeoutError) as e:
-                        logging.warning(f"Engine error on position {board.fen()}: {e}. Restarting engine...")
-                        try:
-                            engine.quit()
-                        except Exception:
-                            pass
-                        engine = start_engine()
-                        continue
+                    info = engine.analyse(board, chess.engine.Limit(depth=depth, time=10.0))
+                    score = info["score"].white()
                     
-    try:
-        engine.quit()
-    except Exception:
-        pass
-    logging.info(f"Finished dataset generation. Saved {extracted_positions} positions to {output_file}.")
+                    if score.is_mate():
+                        continue
+                        
+                    centipawns = score.score()
+                    extracted_batch.append(json.dumps({
+                        "fen": board.fen(),
+                        "score": centipawns,
+                        "wdl": wdl
+                    }) + "\n")
+                    
+        except Exception as e:
+            pass # Ignore engine crashes on bad variation formats
+        finally:
+            engine.quit()
+
+        return extracted_batch
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        threads = max(1, os.cpu_count() - 1)
+        with mp_dummy.Pool(threads) as pool:
+            with tqdm(total=len(games), desc="Extracting NNUE Dataset") as pbar:
+                for batch in pool.imap_unordered(extract_game, games):
+                    for json_line in batch:
+                        f.write(json_line)
+                    pbar.update(1)
+                    
+    logging.info(f"Finished dataset generation. Saved to {output_file}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate NNUE training dataset from MasterGame DB.")
