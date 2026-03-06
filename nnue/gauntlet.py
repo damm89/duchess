@@ -204,12 +204,13 @@ def play_game(
         return _build_result(game, pgn_string, engine1_name, duchess_is_white)
 
     except Exception as exc:
+        import traceback
         for eng in (e1, e2):
             try:
                 eng.quit()
             except Exception:
                 pass
-        logger.error(f"Worker crashed: {exc}")
+        logger.error(f"Worker crashed: {exc!r}\n{traceback.format_exc()}")
         return None
 
 

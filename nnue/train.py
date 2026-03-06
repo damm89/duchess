@@ -133,6 +133,7 @@ def train(data_file="nnue/dataset.jsonl", out_file="nnue/duchess_nnue.pt", epoch
         
     torch.save(model.state_dict(), out_file)
     print(f"Saved PyTorch model to {out_file}", flush=True)
+    return avg_loss
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Duchess NNUE model")
@@ -140,6 +141,11 @@ if __name__ == "__main__":
     parser.add_argument("--out", type=str, default="nnue/duchess_nnue.pt", help="Output PyTorch model file")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--resume", type=str, default=None, help="Path to a previous .pt checkpoint to resume training from.")
+    parser.add_argument("--loss-out", type=str, default=None, help="Optional path to write final loss as JSON.")
 
     args = parser.parse_args()
-    train(data_file=args.data, out_file=args.out, epochs=args.epochs, resume_from=args.resume)
+    final_loss = train(data_file=args.data, out_file=args.out, epochs=args.epochs, resume_from=args.resume)
+    if args.loss_out and final_loss is not None:
+        import json
+        with open(args.loss_out, "w") as f:
+            json.dump({"final_loss": final_loss}, f)

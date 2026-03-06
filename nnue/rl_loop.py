@@ -13,12 +13,16 @@ Automates the full pipeline:
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import logging
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+TRAINING_LOG = Path(__file__).parent / "training_log.json"
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -159,8 +163,21 @@ def main():
         ]
         if os.path.exists(prev_pt):
             train_cmd.extend(["--resume", prev_pt])
+        loss_out = str(PROJECT_ROOT / "nnue" / f"loss_iter_{i}.json")
+        train_cmd.extend(["--loss-out", loss_out])
         if not run_step("PyTorch Training", train_cmd):
             sys.exit(1)
+
+        # Log final training loss
+        try:
+            final_loss = json.loads(Path(loss_out).read_text())["final_loss"]
+            history = json.loads(TRAINING_LOG.read_text()) if TRAINING_LOG.exists() else []
+            history.append({"iteration": i, "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "final_loss": round(final_loss, 6)})
+            TRAINING_LOG.write_text(json.dumps(history, indent=2))
+            logger.info(f"Iteration {i} final loss: {final_loss:.6f}")
+            Path(loss_out).unlink()
+        except Exception as e:
+            logger.warning(f"Could not record training loss: {e}")
             
         # 4. Export to C++ Bin
         bin_path = str(PROJECT_ROOT / "nnue" / f"duchess_iter_{i}.bin")
@@ -188,7 +205,7 @@ def main():
         logger.info("Pushing latest Iteration weights to GitHub...")
         push_cmd = [
             "sh", "-c",
-            f"git add nnue/duchess_iter_{i}.bin nnue/duchess.bin && git commit -m 'Auto-save Iteration {i} NNUE weights' && git push"
+            f"git add nnue/duchess_iter_{i}.bin nnue/duchess.bin nnue/training_log.json && git commit -m 'Auto-save Iteration {i} NNUE weights' && git pull --rebase origin main && git push"
         ]
         if not run_step("GitHub Auto-Save", push_cmd):
             logger.warning("Failed to push to GitHub. Check SSH keys or internet connection.")
