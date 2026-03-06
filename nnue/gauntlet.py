@@ -283,9 +283,31 @@ def run_gauntlet(
     else:
         tc_desc = f"{time_per_move:.1f}s/move"
 
-    logger.info(f"Starting gauntlet: {e1_name} vs {e2_name} — {num_games} games, {tc_desc}, {threads} workers")
-
     db: Session = SessionLocal()
+    
+    # Auto-resume logic: Check if games for today's iteration already exist in the database
+    try:
+        today_str = time.strftime("%Y.%m.%d")
+        gauntlet_event_name = f"Gauntlet: {e1_name} vs {e2_name}"
+        existing_games = db.query(MasterGame).filter(
+            MasterGame.date == today_str,
+            MasterGame.event == gauntlet_event_name,
+            MasterGame.training_use.is_(True)
+        ).count()
+    except Exception as e:
+        logger.warning(f"Could not check existing games: {e}")
+        existing_games = 0
+        
+    if existing_games >= num_games:
+        logger.info(f"Skipping gauntlet: found {existing_games} existing games for today (Target: {num_games})")
+        db.close()
+        return
+    elif existing_games > 0:
+        logger.info(f"Resuming gauntlet: found {existing_games} existing games. Playing {num_games - existing_games} more.")
+        num_games -= existing_games
+    else:
+        logger.info(f"Starting gauntlet: {e1_name} vs {e2_name} — {num_games} games, {tc_desc}, {threads} workers")
+
     completed = 0
     batch: list[dict] = []
     batch_size = 20
