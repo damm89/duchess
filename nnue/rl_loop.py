@@ -190,6 +190,7 @@ def main():
         dataset_cmd = [
             PYTHON_EXE, str(PROJECT_ROOT / "nnue" / "dataset.py"),
             "--out", jsonl_path,
+            "--engine", engine_path,
             "--games", str(args.games_per_iter * 2 + args.gauntlet_games) # Grab self-play + gauntlet games
         ]
         if current_nnue and os.path.exists(current_nnue):
@@ -246,7 +247,6 @@ def main():
         # Optional: Save a copy to the standard path so the GUI can pick it up immediately
         std_bin_path = str(PROJECT_ROOT / "nnue" / "duchess.bin")
         try:
-            import shutil
             shutil.copy2(bin_path, std_bin_path)
         except Exception as e:
             logger.warning(f"Could not copy latest .bin to standard path: {e}")

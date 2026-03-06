@@ -45,6 +45,10 @@ fi
 source py-duchess/bin/activate
 pip install -r requirements.txt -q
 
+if [ ! -f ".env" ]; then
+    echo "DATABASE_URL=postgresql:///duchess_db" > .env
+    echo "  [✓] Created .env with DATABASE_URL"
+fi
 alembic upgrade head
 
 cd engine
@@ -69,6 +73,37 @@ nohup /workspace/backup_db.sh > /workspace/backup.log 2>&1 &
 # 5. Launch the training loop in a tmux session
 echo "[5/5] Launching training loop..."
 
+# Pre-flight checks — warn about missing optional paths, build flags dynamically
+EXTRA_FLAGS=""
+
+if [ -f "/workspace/Queen405x64/queen" ]; then
+    EXTRA_FLAGS="$EXTRA_FLAGS --gauntlet-engine /workspace/Queen405x64/queen --gauntlet-games 20 --gauntlet-threads 4 --gauntlet-depth 6"
+    echo "  [✓] Gauntlet engine: /workspace/Queen405x64/queen"
+else
+    echo "  [!] Queen engine not found at /workspace/Queen405x64/queen — gauntlet disabled."
+fi
+
+if [ -d "/workspace/Syzygy" ]; then
+    EXTRA_FLAGS="$EXTRA_FLAGS --syzygy /workspace/Syzygy"
+    echo "  [✓] Syzygy tablebases: /workspace/Syzygy"
+else
+    echo "  [!] Syzygy dir not found at /workspace/Syzygy — endgame tablebases disabled."
+fi
+
+if [ -f "/workspace/duchess/assets/gm2001.bin" ]; then
+    EXTRA_FLAGS="$EXTRA_FLAGS --book /workspace/duchess/assets/gm2001.bin"
+    echo "  [✓] Opening book: /workspace/duchess/assets/gm2001.bin"
+else
+    echo "  [!] Opening book not found at /workspace/duchess/assets/gm2001.bin — opening diversity disabled."
+fi
+
+if [ -f "/usr/games/stockfish" ]; then
+    EXTRA_FLAGS="$EXTRA_FLAGS --stockfish /usr/games/stockfish --distill-pgn /workspace/lichess_elite.pgn --distill-download --distill-games 50000 --distill-workers \$(nproc)"
+    echo "  [✓] Stockfish: /usr/games/stockfish"
+else
+    echo "  [!] Stockfish not found at /usr/games/stockfish — distillation disabled."
+fi
+
 # Kill any existing training session
 tmux kill-session -t training 2>/dev/null || true
 
@@ -82,17 +117,7 @@ tmux send-keys -t training "python nnue/rl_loop.py \
     --threads \$(nproc) \
     --selfplay-depth 6 \
     --epochs-per-iter 30 \
-    --book /workspace/duchess/assets/gm2001.bin \
-    --syzygy /workspace/Syzygy \
-    --gauntlet-engine /workspace/Queen405x64/queen \
-    --gauntlet-games 20 \
-    --gauntlet-threads 4 \
-    --gauntlet-depth 6 \
-    --stockfish /usr/games/stockfish \
-    --distill-pgn /workspace/lichess_elite.pgn \
-    --distill-download \
-    --distill-games 50000 \
-    --distill-workers \$(nproc)" Enter
+    $EXTRA_FLAGS" Enter
 
 echo ""
 echo "========================================="
