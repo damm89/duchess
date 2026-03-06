@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--gauntlet-engine", type=str, default="", help="Optional: Path to an opponent UCI engine. When set, plays extra games vs this engine before each training step.")
     parser.add_argument("--gauntlet-games", type=int, default=50, help="Number of gauntlet games per iteration (used with --gauntlet-engine).")
     parser.add_argument("--gauntlet-threads", type=int, default=4, help="Number of parallel workers for gauntlet (default: 4; keep low to avoid overwhelming the opponent engine).")
+    parser.add_argument("--gauntlet-depth", type=int, default=6, help="Fixed search depth for gauntlet games (default: 6; more reliable than time-based limits with external engines).")
     parser.add_argument("--book", type=str, default="", help="Path to a Polyglot opening book (.bin) for opening diversity in self-play and gauntlet.")
     
     args = parser.parse_args()
@@ -130,6 +131,7 @@ def main():
                 "--engine2", args.gauntlet_engine,
                 "--games", str(args.gauntlet_games),
                 "--threads", str(args.gauntlet_threads),
+                "--depth", str(args.gauntlet_depth),
                 "--iteration", str(i)
             ]
             if current_nnue and os.path.exists(current_nnue):
