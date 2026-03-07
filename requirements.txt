@@ -1,4 +1,8 @@
 PyQt6==6.4.0
+fastapi
+uvicorn[standard]
+twilio
+cairosvg
 pytest
 pytest-qt
 sqlalchemy

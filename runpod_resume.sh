@@ -165,10 +165,28 @@ if [ "$AUTO_STOP" = "1" ]; then
 fi
 tmux send-keys -t training "$TRAIN_CMD" Enter
 
+# Start WhatsApp bot (if Twilio credentials are set)
+if [ -n "${TWILIO_ACCOUNT_SID:-}" ] && [ -n "${TWILIO_AUTH_TOKEN:-}" ]; then
+    WA_PUBLIC_URL="https://${RUNPOD_POD_ID}-8000.proxy.runpod.net"
+    tmux kill-session -t whatsapp 2>/dev/null || true
+    tmux new-session -d -s whatsapp -x 220 -y 50
+    tmux send-keys -t whatsapp "source /workspace/duchess/py-duchess/bin/activate" Enter
+    tmux send-keys -t whatsapp "cd /workspace/duchess" Enter
+    tmux send-keys -t whatsapp "WHATSAPP_PUBLIC_URL=${WA_PUBLIC_URL} uvicorn whatsapp.bot:app --host 0.0.0.0 --port 8000" Enter
+    echo ""
+    echo "  [✓] WhatsApp bot started on port 8000"
+    echo "      Public URL: ${WA_PUBLIC_URL}"
+    echo "      Set this as your Twilio WhatsApp webhook: ${WA_PUBLIC_URL}/whatsapp"
+else
+    echo "  [!] Twilio credentials not set — WhatsApp bot not started."
+    echo "      Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN as pod environment variables."
+fi
+
 echo ""
 echo "========================================="
 echo "✅ Setup complete — training is running!"
 echo ""
-echo "  Watch:  tmux attach -t training"
-echo "  Detach: Ctrl+B then D"
+echo "  Training: tmux attach -t training"
+echo "  WhatsApp: tmux attach -t whatsapp"
+echo "  Detach:   Ctrl+B then D"
 echo "========================================="
