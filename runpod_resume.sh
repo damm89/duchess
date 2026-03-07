@@ -71,8 +71,12 @@ elif [ -f "/workspace/.github_token" ]; then
     echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
     echo "  [✓] GitHub credentials configured via /workspace/.github_token"
 else
-    echo "  [!] No GitHub credentials found — pushes will prompt."
-    echo "      Fix: echo YOUR_TOKEN > /workspace/.github_token"
+    echo ""
+    read -rsp "  Enter GitHub Personal Access Token (will be saved to /workspace/.github_token): " TOKEN
+    echo ""
+    echo "${TOKEN}" > /workspace/.github_token
+    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials saved."
 fi
 git lfs install
 git pull origin main
