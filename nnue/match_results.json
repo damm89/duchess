@@ -35,5 +35,17 @@
     "losses": 35,
     "score_pct": 7.7,
     "elo_diff": -432
+  },
+  {
+    "date": "2026-03-07 16:32",
+    "iteration": 31,
+    "opponent": "queen",
+    "depth": 6,
+    "games": 40,
+    "wins": 1,
+    "draws": 4,
+    "losses": 35,
+    "score_pct": 7.5,
+    "elo_diff": -436
   }
 ]
