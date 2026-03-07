@@ -65,9 +65,14 @@ git config --global user.email "runpod@duchess.test"
 git config --global credential.helper store
 if [ -n "${GITHUB_TOKEN:-}" ]; then
     echo "https://damm89:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
-    echo "  [✓] GitHub credentials configured via GITHUB_TOKEN"
+    echo "  [✓] GitHub credentials configured via GITHUB_TOKEN env var"
+elif [ -f "/workspace/.github_token" ]; then
+    TOKEN=$(cat /workspace/.github_token)
+    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials configured via /workspace/.github_token"
 else
-    echo "  [!] GITHUB_TOKEN not set — GitHub pushes will prompt for credentials"
+    echo "  [!] No GitHub credentials found — pushes will prompt."
+    echo "      Fix: echo YOUR_TOKEN > /workspace/.github_token"
 fi
 git lfs install
 git pull origin main
