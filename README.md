@@ -24,7 +24,7 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 
 ┌─────────────────────────────────────────────────┐
 │  NNUE Training Pipeline  (nnue/)                │
-│  selfplay.py · gauntlet.py · dataset.py         │
+│  selfplay.py · gauntlet.py · distill.py         │
 │  train.py · export.py · match.py                │
 │  rl_loop.py (iterative RL orchestrator)         │
 └─────────────────────────────────────────────────┘
@@ -37,7 +37,7 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 | `engine/` | C++ engine — headers in `include/`, sources in `src/`, tests in `tests/` |
 | `duchess/` | Python application — board logic, engine wrapper, processors |
 | `duchess/gui/` | PyQt6 interface — board widget, eval bar, main window |
-| `nnue/` | NNUE training pipeline — self-play, dataset extraction, PyTorch training, C++ export, RL orchestrator |
+| `nnue/` | NNUE training pipeline — self-play, distillation, PyTorch training, C++ export, RL orchestrator |
 | `tests/` | Python test suite (pytest + pytest-qt) |
 | `assets/` | Icons, piece images, and other static resources |
 
@@ -81,7 +81,6 @@ Duchess is a from-scratch chess engine and desktop application aiming for superh
 
 - Lichess API game importer (Phase 6.4)
 - Smart time management (allocate more time in complex positions)
-- Distillation training from Stockfish evaluations
 
 ---
 
@@ -99,7 +98,23 @@ Rich handcrafted eval used standalone and blended 50/50 with NNUE: passed/double
 
 ### NNUE Training (in progress)
 
-The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet games against an external engine (games from both self-play and gauntlet feed into training). Architecture: HalfKP 41024→256→128→128→1. Both self-play and gauntlet run at depth 6. Training resumes from the previous iteration's checkpoint so each network builds on what came before. Training loss per iteration is logged to `training_log.json`. Standalone match results (no DB) are tracked in `match_results.json` via `match.py`.
+The RL loop (`rl_loop.py`) automates iterative self-play training with Polyglot opening book support, Syzygy tablebases, and gauntlet matches against an external engine. Architecture: HalfKP 41024→256→128→128→1.
+
+Each iteration:
+1. **Self-play** — engine plays itself at depth 3 (10,000 games), capturing positions and scores directly via `engine.analyse()` — no re-evaluation pass needed
+2. **Gauntlet** — optional match against an external engine (Queen405x64) for diagnostic purposes
+3. **Distillation mix** — 500,000 positions streamed from the [Lichess eval DB](https://database.lichess.org/#evals) are mixed into the training set, anchoring label quality with cloud-depth evaluations
+4. **Train** — PyTorch training on combined dataset, resuming from the previous checkpoint
+5. **Export** — converted to `.bin` for the C++ engine; auto-pushed to GitHub
+
+Training loss per iteration is logged to `training_log.json`. Gauntlet results are tracked in `match_results.json`.
+
+**Current progress vs Queen405x64 (depth 6):**
+
+| Date | Iteration | W | D | L | Score | Elo diff |
+|---|---|---|---|---|---|---|
+| 2026-03-06 | 14 | 0 | 0 | 10 | 0.0% | — |
+| 2026-03-07 | 24 | 2 | 1 | 37 | 6.2% | −470 |
 
 Git storage: only the latest `duchess_iter_N.bin` is kept in the repository (older weights and all `.pt`/`.jsonl` checkpoints are excluded after use).
 
@@ -107,8 +122,7 @@ Git storage: only the latest `duchess_iter_N.bin` is kept in the repository (old
 
 | Priority | Feature | Expected impact |
 |---|---|---|
-| High | More RL iterations (23+ done, continuing) | Network learns from more diverse positions |
-| Medium | Distillation from Stockfish | Bootstrap from strong evaluations |
+| High | More RL iterations (24 done, targeting 50) | Network learns from more diverse positions |
 | Medium | Smart time management | Better use of clock in timed games |
 
 ---
@@ -211,6 +225,7 @@ cd engine/build && ctest --output-on-failure
 | [Catch2](https://github.com/catchorg/Catch2) | BSL-1.0 | C++ test framework for engine tests |
 | [Fathom](https://github.com/jdart1/Fathom) | MIT | Syzygy tablebase probing library |
 | gm2001.bin | Public domain | Polyglot opening book compiled from GM games |
+| [Lichess eval DB](https://database.lichess.org/#evals) | CC0 | 362M cloud-depth evaluated positions used for NNUE distillation |
 
 ### AI assistance
 
