@@ -63,6 +63,12 @@ cd /workspace/duchess
 git config --global user.name "Duchess RunPod"
 git config --global user.email "runpod@duchess.test"
 git config --global credential.helper store
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    echo "https://damm89:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials configured via GITHUB_TOKEN"
+else
+    echo "  [!] GITHUB_TOKEN not set — GitHub pushes will prompt for credentials"
+fi
 git lfs install
 git pull origin main
 git submodule update --init --recursive
