@@ -43,6 +43,13 @@ compacted.txt
 # Agent instructions (not part of the app)
 agent_instructions/
 **/engine_phase1_instructions.md
-# NNUE intermediate checkpoints (obsolete after training)
+# NNUE intermediate checkpoints and datasets (not stored in git)
 nnue/duchess_iter_*.pt
 nnue/dataset_iter_*.jsonl
+nnue/dataset.jsonl
+nnue/distill_dataset.jsonl
+nnue/duchess_nnue*.bin
+nnue/duchess_nnue*.pt
+# Old iteration weights (only latest is kept)
+nnue/duchess_iter_[0-9].bin
+nnue/duchess_iter_[0-9][0-9].bin

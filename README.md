@@ -115,6 +115,9 @@ Training loss per iteration is logged to `training_log.json`. Gauntlet results a
 |---|---|---|---|---|---|---|
 | 2026-03-06 | 14 | 0 | 0 | 10 | 0.0% | — |
 | 2026-03-07 | 24 | 2 | 1 | 37 | 6.2% | −470 |
+| 2026-03-07 | 26 | 2 | 2 | 35 | 7.7% | −432 |
+| 2026-03-07 | 31 | 1 | 4 | 35 | 7.5% | −436 |
+| 2026-03-07 | 35 | 2 | 9 | 29 | **16.2%** | **−285** |
 
 Git storage: only the latest `duchess_iter_N.bin` is kept in the repository (older weights and all `.pt`/`.jsonl` checkpoints are excluded after use).
 
@@ -122,7 +125,7 @@ Git storage: only the latest `duchess_iter_N.bin` is kept in the repository (old
 
 | Priority | Feature | Expected impact |
 |---|---|---|
-| High | More RL iterations (24 done, targeting 50) | Network learns from more diverse positions |
+| High | More RL iterations (35 done, targeting 50) | Network learns from more diverse positions |
 | Medium | Smart time management | Better use of clock in timed games |
 
 ---
