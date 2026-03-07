@@ -34,6 +34,23 @@ fi
 
 echo "=== Resuming Duchess RL Loop on RunPod ==="
 
+# GitHub credentials — prompt upfront so user doesn't wait through installs
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    echo "https://damm89:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials configured via GITHUB_TOKEN env var"
+elif [ -f "/workspace/.github_token" ]; then
+    TOKEN=$(cat /workspace/.github_token)
+    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials configured via /workspace/.github_token"
+else
+    echo ""
+    read -rsp "  Enter GitHub Personal Access Token (will be saved to /workspace/.github_token): " TOKEN
+    echo ""
+    echo "${TOKEN}" > /workspace/.github_token
+    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
+    echo "  [✓] GitHub credentials saved."
+fi
+
 # 1. System Dependencies
 echo "[1/5] Installing system dependencies..."
 apt-get update -qq
@@ -63,21 +80,6 @@ cd /workspace/duchess
 git config --global user.name "Duchess RunPod"
 git config --global user.email "runpod@duchess.test"
 git config --global credential.helper store
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-    echo "https://damm89:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
-    echo "  [✓] GitHub credentials configured via GITHUB_TOKEN env var"
-elif [ -f "/workspace/.github_token" ]; then
-    TOKEN=$(cat /workspace/.github_token)
-    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
-    echo "  [✓] GitHub credentials configured via /workspace/.github_token"
-else
-    echo ""
-    read -rsp "  Enter GitHub Personal Access Token (will be saved to /workspace/.github_token): " TOKEN
-    echo ""
-    echo "${TOKEN}" > /workspace/.github_token
-    echo "https://damm89:${TOKEN}@github.com" > ~/.git-credentials
-    echo "  [✓] GitHub credentials saved."
-fi
 git lfs install
 git pull origin main
 git submodule update --init --recursive
