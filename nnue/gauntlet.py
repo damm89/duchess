@@ -275,6 +275,7 @@ def run_gauntlet(
     syzygy_path: Optional[str],
     book_path: Optional[str] = None,
     iteration: Optional[int] = None,
+    no_db: bool = False,
 ):
     e1_name = os.path.basename(engine1_path)
     e2_name = os.path.basename(engine2_path)
@@ -287,28 +288,32 @@ def run_gauntlet(
     else:
         tc_desc = f"{time_per_move:.1f}s/move"
 
-    db: Session = SessionLocal()
-    
-    # Auto-resume logic: Check if games for today's iteration already exist in the database
-    try:
-        gauntlet_event_name = f"Gauntlet: {e1_name} vs {e2_name} Iteration {iteration}" if iteration else f"Gauntlet: {e1_name} vs {e2_name}"
-        existing_games = db.query(MasterGame).filter(
-            MasterGame.event == gauntlet_event_name,
-            MasterGame.training_use.is_(True)
-        ).count()
-    except Exception as e:
-        logger.warning(f"Could not check existing games: {e}")
-        existing_games = 0
-        
-    if existing_games >= num_games:
-        logger.info(f"Skipping gauntlet: found {existing_games} existing games for today (Target: {num_games})")
-        db.close()
-        return
-    elif existing_games > 0:
-        logger.info(f"Resuming gauntlet: found {existing_games} existing games. Playing {num_games - existing_games} more.")
-        num_games -= existing_games
+    if no_db:
+        db = None
+        logger.info(f"Starting gauntlet: {e1_name} vs {e2_name} — {num_games} games, {tc_desc}, {threads} workers (no DB)")
     else:
-        logger.info(f"Starting gauntlet: {e1_name} vs {e2_name} — {num_games} games, {tc_desc}, {threads} workers")
+        db: Session = SessionLocal()
+
+        # Auto-resume logic: Check if games for today's iteration already exist in the database
+        try:
+            gauntlet_event_name = f"Gauntlet: {e1_name} vs {e2_name} Iteration {iteration}" if iteration else f"Gauntlet: {e1_name} vs {e2_name}"
+            existing_games = db.query(MasterGame).filter(
+                MasterGame.event == gauntlet_event_name,
+                MasterGame.training_use.is_(True)
+            ).count()
+        except Exception as e:
+            logger.warning(f"Could not check existing games: {e}")
+            existing_games = 0
+
+        if existing_games >= num_games:
+            logger.info(f"Skipping gauntlet: found {existing_games} existing games for today (Target: {num_games})")
+            db.close()
+            return
+        elif existing_games > 0:
+            logger.info(f"Resuming gauntlet: found {existing_games} existing games. Playing {num_games - existing_games} more.")
+            num_games -= existing_games
+        else:
+            logger.info(f"Starting gauntlet: {e1_name} vs {e2_name} — {num_games} games, {tc_desc}, {threads} workers")
 
     completed = 0
     batch: list[dict] = []
@@ -358,9 +363,10 @@ def run_gauntlet(
                         f"Score: {e1_wins}W {e1_draws}D {e1_losses}L ({score_pct:.0f}%)"
                     )
 
-                    batch.append(result)
+                    if not no_db:
+                        batch.append(result)
                     completed += 1
-                    if len(batch) >= batch_size:
+                    if not no_db and len(batch) >= batch_size:
                         try:
                             db.bulk_insert_mappings(MasterGame, batch)
                             db.commit()
@@ -369,7 +375,7 @@ def run_gauntlet(
                             db.rollback()
                             logger.error(f"DB insert failed: {exc}")
 
-            if batch:
+            if not no_db and batch:
                 try:
                     db.bulk_insert_mappings(MasterGame, batch)
                     db.commit()
@@ -382,7 +388,8 @@ def run_gauntlet(
         pool.terminate()
         pool.join()
     finally:
-        db.close()
+        if db:
+            db.close()
 
     elapsed = time.time() - start_time
     rate = completed / elapsed if elapsed > 0 else 0
@@ -419,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--syzygy", type=str, default=None, help="Optional Syzygy tablebase directory path.")
     parser.add_argument("--book", type=str, default=None, help="Path to a Polyglot opening book (.bin) for opening diversity.")
     parser.add_argument("--iteration", type=int, default=None, help="The current RL loop iteration (used to tag games in the DB to resume on crash).")
+    parser.add_argument("--no-db", action="store_true", help="Skip all database interaction — just play and show the score.")
 
     args = parser.parse_args()
 
@@ -455,4 +463,5 @@ if __name__ == "__main__":
         syzygy_path=args.syzygy,
         book_path=args.book,
         iteration=args.iteration,
+        no_db=args.no_db,
     )
