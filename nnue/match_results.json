@@ -11,4 +11,17 @@
     "score_pct": 0.0,
     "avg_moves": 38.0
   }
+  ,
+  {
+    "date": "2026-03-07 09:25",
+    "iteration": 24,
+    "opponent": "queen",
+    "depth": 6,
+    "games": 40,
+    "wins": 2,
+    "draws": 1,
+    "losses": 37,
+    "score_pct": 6.2,
+    "elo_diff": -470
+  }
 ]
